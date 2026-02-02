@@ -2,6 +2,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
+import os
+import uvicorn
 from database import engine, Base
 from routes import password, auth
 
@@ -27,5 +29,10 @@ app.include_router(password.router)
 frontend_path = Path(__file__).parent.parent / "frontend" / "frontend-app" / "dist"
 if frontend_path.exists():
     app.mount("/", StaticFiles(directory=str(frontend_path), html=True), name="static")
+
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", "8000"))
+    uvicorn.run(app, host="0.0.0.0", port=port)
 
 
