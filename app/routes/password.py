@@ -40,7 +40,21 @@ def add_password(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    encrypted_password = encrypt_text(password.password)
+    if not password.key or not password.key.strip():
+        raise HTTPException(status_code=400, detail="Brak klucza Fernet")
+    
+    key_used = password.key.strip()
+    print(f"[ADD] Klucz otrzymany: {key_used}")
+    print(f"[ADD] Długość klucza: {len(key_used)}")
+    print(f"[ADD] Hasło do zaszyfrowania: {password.password}")
+    
+    try:
+        encrypted_password = encrypt_text(password.password, key_used)
+        print(f"[ADD] Zaszyfrowane: {encrypted_password}")
+    except Exception as e:
+        print(f"[ADD] BŁĄD szyfrowania: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Błąd szyfrowania: {str(e)}")
+    
     new_entry = PasswordEntry(
         user_id=current_user.id,
         service=password.service,
@@ -74,9 +88,15 @@ def update_password(
     if not item:
         raise HTTPException(status_code=404, detail="Hasło nie istnieje")
 
-    item.service = updated.service
-    item.login = updated.login
-    item.password = encrypt_text(updated.password)
+    if not updated.key or not updated.key.strip():
+        raise HTTPException(status_code=400, detail="Brak klucza Fernet")
+    
+    try:
+        item.service = updated.service
+        item.login = updated.login
+        item.password = encrypt_text(updated.password, updated.key.strip())
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Błąd szyfrowania: {str(e)}")
 
     db.commit()
     db.refresh(item)
@@ -109,7 +129,7 @@ def delete_password(
     return {"message": "Password deleted"}
 
 
-# 🔹 Odszyfruj hasło (na podstawie klucza)
+# 🔹 Odszyfruj hasło (ręcznie - użytkownik podaje klucz Fernet)
 @router.post("/decrypt", response_model=dict)
 def decrypt_via_key(
     current_user: User = Depends(get_current_user),
@@ -118,23 +138,32 @@ def decrypt_via_key(
     key = (payload.get("key") or "").strip()
     encrypted = (payload.get("password") or "").strip()
     
+    print(f"[DECRYPT] Klucz otrzymany: {key}")
+    print(f"[DECRYPT] Długość klucza: {len(key)}")
+    print(f"[DECRYPT] Zaszyfrowane hasło: {encrypted}")
+    
     if not key or not encrypted:
         raise HTTPException(status_code=400, detail="Brak klucza lub hasła")
 
-    # walidacja formatu klucza
+    # Walidacja formatu klucza
     try:
         f = Fernet(key.encode())
-    except Exception:
+        print(f"[DECRYPT] Klucz jest poprawny dla Fernet")
+    except Exception as e:
+        print(f"[DECRYPT] BŁĄD: Klucz niepoprawny - {str(e)}")
         raise HTTPException(
             status_code=400,
-            detail="Zły format klucza (musi być 32B base64, 44 znaki, zwykle kończy się '=')"
+            detail="Zły format klucza Fernet (musi być 44 znaki base64)"
         )
 
-    # próba odszyfrowania
+    # Próba odszyfrowania
     try:
         plain = f.decrypt(encrypted.encode()).decode()
+        print(f"[DECRYPT] Odszyfrowane: {plain}")
         return {"decrypted": plain}
-    except InvalidToken:
-        raise HTTPException(status_code=400, detail="Klucz nie pasuje do tego zaszyfrowanego hasła")
-    except Exception:
-        raise HTTPException(status_code=400, detail="Niepowodzenie odszyfrowania")
+    except InvalidToken as e:
+        print(f"[DECRYPT] BŁĄD InvalidToken: {str(e)}")
+        raise HTTPException(status_code=400, detail="Nieprawidłowy klucz - nie pasuje do tego hasła")
+    except Exception as e:
+        print(f"[DECRYPT] BŁĄD: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Błąd odszyfrowania: {str(e)}")

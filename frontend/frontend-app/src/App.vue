@@ -30,6 +30,17 @@
         <button @click="logout" class="logout-btn">Wyloguj</button>
       </div>
 
+      <!-- Klucz odszyfrowania -->
+      <div class="key-section">
+        <label>Klucz Fernet (do szyfrowania i odszyfrowania haseł):</label>
+        <input v-model="fernetKey" type="text" placeholder="Wpisz lub wygeneruj nowy klucz Fernet" />
+        <button @click="generateFernetKey" class="generate-btn">🔑 Generuj nowy klucz</button>
+        <small>
+          <strong>⚠️ WAŻNE:</strong> Zapisz ten klucz w bezpiecznym miejscu! Bez niego nie odszyfrujesz swoich haseł.
+          Klucz jest przechowywany lokalnie w przeglądarce.
+        </small>
+      </div>
+
       <!-- Formularz dodawania -->
       <div class="form-section">
         <input v-model="newPassword.service" type="text" placeholder="Serwis" />
@@ -71,6 +82,7 @@ export default {
       passwords: [],
       decrypted: {},
       newPassword: { service: "", login: "", password: "" },
+      fernetKey: localStorage.getItem("fernetKey") || "",
     };
   },
   methods: {
@@ -121,14 +133,27 @@ export default {
       }
     },
     async addPassword() {
+      if (!this.fernetKey || this.fernetKey.trim() === "") {
+        alert("Najpierw wpisz lub wygeneruj klucz Fernet!");
+        return;
+      }
+      console.log("[ADD] Klucz używany:", this.fernetKey);
+      console.log("[ADD] Długość klucza:", this.fernetKey.length);
+      console.log("[ADD] Hasło:", this.newPassword.password);
       try {
-        await axios.post(`${API_URL}/passwords`, this.newPassword, {
+        const response = await axios.post(`${API_URL}/passwords`, {
+          ...this.newPassword,
+          key: this.fernetKey.trim()
+        }, {
           headers: { Authorization: `Bearer ${this.token}` },
         });
+        console.log("[ADD] Response:", response.data);
+        console.log("[ADD] Zaszyfrowane hasło:", response.data.password);
         this.newPassword = { service: "", login: "", password: "" };
         this.fetchPasswords();
       } catch (err) {
-        alert("Błąd dodawania hasła");
+        console.error("[ADD] BŁĄD:", err);
+        alert(err.response?.data?.detail || "Błąd dodawania hasła");
       }
     },
     async deletePassword(id) {
@@ -144,15 +169,57 @@ export default {
       }
     },
     async decryptPassword(id, encrypted) {
+      if (!this.fernetKey || this.fernetKey.trim() === "") {
+        alert("Najpierw wpisz klucz Fernet!");
+        return;
+      }
+      console.log("[DECRYPT] ID:", id);
+      console.log("[DECRYPT] Klucz używany:", this.fernetKey);
+      console.log("[DECRYPT] Długość klucza:", this.fernetKey.length);
+      console.log("[DECRYPT] Zaszyfrowane hasło:", encrypted);
+      console.log("[DECRYPT] Długość zaszyfrowanego:", encrypted.length);
       try {
         const res = await axios.post(
           `${API_URL}/passwords/decrypt`,
-          { key: "", password: encrypted },
+          { key: this.fernetKey.trim(), password: encrypted },
           { headers: { Authorization: `Bearer ${this.token}` } }
         );
-        this.$set(this.decrypted, id, res.data.decrypted);
+        console.log("[DECRYPT] Response:", res.data);
+        console.log("[DECRYPT] Odszyfrowane hasło:", res.data.decrypted);
+        // Vue 3: nie używamy $set - reaktywność działa automatycznie
+        this.decrypted[id] = res.data.decrypted;
       } catch (err) {
-        alert("Błąd odszyfrowania");
+        console.error("[DECRYPT] BŁĄD:", err);
+        console.error("[DECRYPT] Response data:", err.response?.data);
+        alert(err.response?.data?.detail || "Błąd odszyfrowania - sprawdź czy klucz jest poprawny");
+      }
+    },
+    generateFernetKey() {
+      // Generuj 32 losowe bajty
+      const array = new Uint8Array(32);
+      crypto.getRandomValues(array);
+      
+      console.log("[GEN] Losowe bajty (hex):", Array.from(array).map(b => b.toString(16).padStart(2, '0')).join(''));
+      
+      // Konwertuj do base64 (poprawnie obsługując wszystkie bajty)
+      let binary = '';
+      for (let i = 0; i < array.length; i++) {
+        binary += String.fromCharCode(array[i]);
+      }
+      const base64 = btoa(binary);
+      
+      console.log("[GEN] Klucz base64:", base64);
+      console.log("[GEN] Długość klucza:", base64.length);
+      
+      this.fernetKey = base64;
+      localStorage.setItem("fernetKey", base64);
+      alert("✅ Klucz wygenerowany!\n\n⚠️ ZAPISZ GO W BEZPIECZNYM MIEJSCU!\n\nBez tego klucza nie odszyfrujesz swoich haseł.\n\nKlucz: " + base64);
+    },
+  },
+  watch: {
+    fernetKey(newKey) {
+      if (newKey) {
+        localStorage.setItem("fernetKey", newKey);
       }
     },
   },
@@ -214,6 +281,50 @@ body {
 
 .logout-btn:hover {
   background: #cc0000;
+}
+
+.key-section {
+  margin: 20px 0;
+  padding: 15px;
+  background: #fff9e6;
+  border: 2px solid #ffd700;
+  border-radius: 8px;
+}
+
+.key-section label {
+  display: block;
+  font-weight: bold;
+  margin-bottom: 8px;
+  color: #333;
+}
+
+.key-section input {
+  font-family: monospace;
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+
+.key-section small {
+  display: block;
+  color: #666;
+  margin-top: 5px;
+}
+
+.key-section code {
+  background: #f0f0f0;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-family: monospace;
+  color: #d63384;
+}
+
+.generate-btn {
+  background: #28a745;
+  margin-top: 10px;
+}
+
+.generate-btn:hover {
+  background: #218838;
 }
 
 input, button {

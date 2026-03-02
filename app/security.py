@@ -14,26 +14,17 @@ from database import get_db
 load_dotenv()
 
 # ========== FERNET (szyfrowanie haseł użytkowników) ==========
-FERNET_KEY = os.getenv("FERNET_KEY")
-if not FERNET_KEY:
-    raise RuntimeError("Brak FERNET_KEY w .env")
+# Każdy użytkownik generuje i przechowuje swój własny klucz Fernet
 
-FERNET_KEY = FERNET_KEY.strip()
-if FERNET_KEY.startswith("b'") and FERNET_KEY.endswith("'"):
-    FERNET_KEY = FERNET_KEY[2:-1]
+def encrypt_text(plain: str, key: str) -> str:
+    """Encrypt text using provided Fernet key"""
+    f = Fernet(key.encode())
+    return f.encrypt(plain.encode()).decode()
 
-try:
-    _fernet = Fernet(FERNET_KEY.encode())
-except Exception as e:
-    raise RuntimeError(
-        "FERNET_KEY ma zły format. Klucz musi być 32 bajty zakodowane base64 (44 znaki, zwykle kończy się '=')."
-    ) from e
-
-def encrypt_text(plain: str) -> str:
-    return _fernet.encrypt(plain.encode()).decode()
-
-def decrypt_text(token: str) -> str:
-    return _fernet.decrypt(token.encode()).decode()
+def decrypt_text(token: str, key: str) -> str:
+    """Decrypt text using provided Fernet key"""
+    f = Fernet(key.encode())
+    return f.decrypt(token.encode()).decode()
 
 # ========== JWT (autentykacja użytkowników) ==========
 SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-change-in-production")

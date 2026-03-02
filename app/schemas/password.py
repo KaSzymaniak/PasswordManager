@@ -4,6 +4,7 @@ class PasswordCreate(BaseModel):
     service: str
     login: str
     password: str  # plaintext z formularza
+    key: str  # klucz Fernet do szyfrowania
 
 class PasswordOut(BaseModel):
     id: int
