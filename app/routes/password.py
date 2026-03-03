@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Body, status
 from sqlalchemy.orm import Session
+import hashlib
 from database import get_db
 from models.password import PasswordEntry
 from models.user import User
@@ -13,6 +14,28 @@ router = APIRouter(prefix="/passwords", tags=["passwords"])
 def get_user_passwords(user_id: int, db: Session):
     """Helper to get only current user's passwords"""
     return db.query(PasswordEntry).filter(PasswordEntry.user_id == user_id).all()
+
+
+def _hash_key(key: str) -> str:
+    return hashlib.sha256(key.encode()).hexdigest()
+
+
+def ensure_user_fernet_key(current_user: User, key: str, db: Session):
+    """Bind Fernet key to user on first use; reject different keys afterwards."""
+    key_hash = _hash_key(key)
+
+    if not current_user.fernet_key_hash:
+        current_user.fernet_key_hash = key_hash
+        db.add(current_user)
+        db.commit()
+        db.refresh(current_user)
+        return
+
+    if current_user.fernet_key_hash != key_hash:
+        raise HTTPException(
+            status_code=403,
+            detail="Ten klucz Fernet nie jest przypisany do tego konta",
+        )
 
 
 # 🔹 Pobierz wszystkie hasła użytkownika (domyślnie zaszyfrowane)
@@ -44,15 +67,11 @@ def add_password(
         raise HTTPException(status_code=400, detail="Brak klucza Fernet")
     
     key_used = password.key.strip()
-    print(f"[ADD] Klucz otrzymany: {key_used}")
-    print(f"[ADD] Długość klucza: {len(key_used)}")
-    print(f"[ADD] Hasło do zaszyfrowania: {password.password}")
+    ensure_user_fernet_key(current_user, key_used, db)
     
     try:
         encrypted_password = encrypt_text(password.password, key_used)
-        print(f"[ADD] Zaszyfrowane: {encrypted_password}")
     except Exception as e:
-        print(f"[ADD] BŁĄD szyfrowania: {str(e)}")
         raise HTTPException(status_code=400, detail=f"Błąd szyfrowania: {str(e)}")
     
     new_entry = PasswordEntry(
@@ -90,6 +109,8 @@ def update_password(
 
     if not updated.key or not updated.key.strip():
         raise HTTPException(status_code=400, detail="Brak klucza Fernet")
+
+    ensure_user_fernet_key(current_user, updated.key.strip(), db)
     
     try:
         item.service = updated.service
@@ -132,25 +153,22 @@ def delete_password(
 # 🔹 Odszyfruj hasło (ręcznie - użytkownik podaje klucz Fernet)
 @router.post("/decrypt", response_model=dict)
 def decrypt_via_key(
+    payload: dict = Body(...),
     current_user: User = Depends(get_current_user),
-    payload: dict = Body(...)
+    db: Session = Depends(get_db)
 ):
     key = (payload.get("key") or "").strip()
     encrypted = (payload.get("password") or "").strip()
     
-    print(f"[DECRYPT] Klucz otrzymany: {key}")
-    print(f"[DECRYPT] Długość klucza: {len(key)}")
-    print(f"[DECRYPT] Zaszyfrowane hasło: {encrypted}")
-    
     if not key or not encrypted:
         raise HTTPException(status_code=400, detail="Brak klucza lub hasła")
+
+    ensure_user_fernet_key(current_user, key, db)
 
     # Walidacja formatu klucza
     try:
         f = Fernet(key.encode())
-        print(f"[DECRYPT] Klucz jest poprawny dla Fernet")
-    except Exception as e:
-        print(f"[DECRYPT] BŁĄD: Klucz niepoprawny - {str(e)}")
+    except Exception:
         raise HTTPException(
             status_code=400,
             detail="Zły format klucza Fernet (musi być 44 znaki base64)"
@@ -159,11 +177,8 @@ def decrypt_via_key(
     # Próba odszyfrowania
     try:
         plain = f.decrypt(encrypted.encode()).decode()
-        print(f"[DECRYPT] Odszyfrowane: {plain}")
         return {"decrypted": plain}
-    except InvalidToken as e:
-        print(f"[DECRYPT] BŁĄD InvalidToken: {str(e)}")
+    except InvalidToken:
         raise HTTPException(status_code=400, detail="Nieprawidłowy klucz - nie pasuje do tego hasła")
     except Exception as e:
-        print(f"[DECRYPT] BŁĄD: {str(e)}")
         raise HTTPException(status_code=400, detail=f"Błąd odszyfrowania: {str(e)}")

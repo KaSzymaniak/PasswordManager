@@ -55,7 +55,9 @@
           <strong>{{ item.service }}</strong> – {{ item.login }} – 
           <span>{{ decrypted[item.id] || "***" }}</span>
 
-          <button @click="decryptPassword(item.id, item.password)">Pokaż</button>
+          <button @click="togglePasswordVisibility(item.id, item.password)">
+            {{ decrypted[item.id] ? 'Ukryj' : 'Pokaż' }}
+          </button>
           <button @click="deletePassword(item.id)" class="delete-btn">Usuń</button>
         </li>
       </ul>
@@ -70,6 +72,7 @@ import axios from "axios";
 
 // Backend na tym samym hoście
 const API_URL = window.location.origin;
+axios.defaults.withCredentials = true;
 
 export default {
   data() {
@@ -78,11 +81,11 @@ export default {
       isRegisterMode: false,
       authForm: { email: "", password: "" },
       authError: "",
-      token: localStorage.getItem("token"),
       passwords: [],
       decrypted: {},
       newPassword: { service: "", login: "", password: "" },
-      fernetKey: localStorage.getItem("fernetKey") || "",
+      fernetKey: "",
+      currentUserEmail: "",
     };
   },
   methods: {
@@ -94,6 +97,8 @@ export default {
         });
         this.authError = "";
         this.isRegisterMode = false;
+        // Nowe konto - pole klucza pozostaje puste
+        this.fernetKey = "";
         alert("Rejestracja udana! Zaloguj się.");
       } catch (err) {
         this.authError = err.response?.data?.detail || "Błąd rejestracji";
@@ -101,32 +106,41 @@ export default {
     },
     async login() {
       try {
-        const res = await axios.post(`${API_URL}/auth/login`, {
-          email: this.authForm.email,
+        const email = this.authForm.email;
+        await axios.post(`${API_URL}/auth/login`, {
+          email: email,
           password: this.authForm.password,
         });
-        this.token = res.data.access_token;
-        localStorage.setItem("token", this.token);
         this.isLoggedIn = true;
         this.authError = "";
+        this.currentUserEmail = email;
         this.authForm = { email: "", password: "" };
+        // Wczytaj klucz dla tego użytkownika z localStorage
+        this.fernetKey = localStorage.getItem(`fernetKey_${this.currentUserEmail}`) || "";
+        console.log("[LOGIN] Email:", this.currentUserEmail);
+        console.log("[LOGIN] Wczytany klucz:", this.fernetKey);
+        console.log("[LOGIN] Klucz z localStorage:", localStorage.getItem(`fernetKey_${this.currentUserEmail}`));
         this.fetchPasswords();
       } catch (err) {
         this.authError = err.response?.data?.detail || "Błędne dane logowania";
       }
     },
-    logout() {
+    async logout() {
+      try {
+        await axios.post(`${API_URL}/auth/logout`);
+      } catch (err) {
+        console.error("Błąd wylogowania:", err);
+      }
       this.isLoggedIn = false;
-      this.token = "";
-      localStorage.removeItem("token");
       this.passwords = [];
       this.decrypted = {};
+      // Wyczyść klucz z pamięci (ale zostaw w localStorage dla tego konta)
+      this.fernetKey = "";
+      this.currentUserEmail = "";
     },
     async fetchPasswords() {
       try {
-        const res = await axios.get(`${API_URL}/passwords`, {
-          headers: { Authorization: `Bearer ${this.token}` },
-        });
+        const res = await axios.get(`${API_URL}/passwords`);
         this.passwords = res.data;
       } catch (err) {
         console.error("Błąd pobierania haseł:", err);
@@ -144,8 +158,6 @@ export default {
         const response = await axios.post(`${API_URL}/passwords`, {
           ...this.newPassword,
           key: this.fernetKey.trim()
-        }, {
-          headers: { Authorization: `Bearer ${this.token}` },
         });
         console.log("[ADD] Response:", response.data);
         console.log("[ADD] Zaszyfrowane hasło:", response.data.password);
@@ -159,14 +171,21 @@ export default {
     async deletePassword(id) {
       if (confirm("Na pewno usunąć hasło?")) {
         try {
-          await axios.delete(`${API_URL}/passwords/${id}`, {
-            headers: { Authorization: `Bearer ${this.token}` },
-          });
+          await axios.delete(`${API_URL}/passwords/${id}`);
           this.fetchPasswords();
         } catch (err) {
           alert("Błąd usuwania");
         }
       }
+    },
+    togglePasswordVisibility(id, encrypted) {
+      // Jeśli hasło jest już widoczne - ukryj je
+      if (this.decrypted[id]) {
+        delete this.decrypted[id];
+        return;
+      }
+      // W przeciwnym razie - odszyfruj i pokaż
+      this.decryptPassword(id, encrypted);
     },
     async decryptPassword(id, encrypted) {
       if (!this.fernetKey || this.fernetKey.trim() === "") {
@@ -181,8 +200,7 @@ export default {
       try {
         const res = await axios.post(
           `${API_URL}/passwords/decrypt`,
-          { key: this.fernetKey.trim(), password: encrypted },
-          { headers: { Authorization: `Bearer ${this.token}` } }
+          { key: this.fernetKey.trim(), password: encrypted }
         );
         console.log("[DECRYPT] Response:", res.data);
         console.log("[DECRYPT] Odszyfrowane hasło:", res.data.decrypted);
@@ -212,22 +230,43 @@ export default {
       console.log("[GEN] Długość klucza:", base64.length);
       
       this.fernetKey = base64;
-      localStorage.setItem("fernetKey", base64);
+      // Zapisz klucz dla tego konkretnego użytkownika
+      console.log("[GEN] Email użytkownika:", this.currentUserEmail);
+      console.log("[GEN] Zapisuję klucz jako:", `fernetKey_${this.currentUserEmail}`);
+      if (this.currentUserEmail) {
+        localStorage.setItem(`fernetKey_${this.currentUserEmail}`, base64);
+        console.log("[GEN] Klucz zapisany w localStorage");
+      } else {
+        console.error("[GEN] BRAK EMAIL - klucz NIE został zapisany!");
+      }
       alert("✅ Klucz wygenerowany!\n\n⚠️ ZAPISZ GO W BEZPIECZNYM MIEJSCU!\n\nBez tego klucza nie odszyfrujesz swoich haseł.\n\nKlucz: " + base64);
     },
   },
   watch: {
     fernetKey(newKey) {
-      if (newKey) {
-        localStorage.setItem("fernetKey", newKey);
+      // Zapisuj klucz dla konkretnego użytkownika
+      if (newKey && this.currentUserEmail) {
+        localStorage.setItem(`fernetKey_${this.currentUserEmail}`, newKey);
       }
     },
   },
   mounted() {
-    if (this.token) {
-      this.isLoggedIn = true;
-      this.fetchPasswords();
-    }
+    axios
+      .get(`${API_URL}/auth/me`)
+      .then((response) => {
+        this.isLoggedIn = true;
+        // Pobierz email z odpowiedzi (zakładam, że endpoint /auth/me zwraca dane użytkownika)
+        console.log("[MOUNTED] Response /auth/me:", response.data);
+        this.currentUserEmail = response.data.email;
+        console.log("[MOUNTED] Email:", this.currentUserEmail);
+        // Wczytaj klucz dla tego użytkownika
+        this.fernetKey = localStorage.getItem(`fernetKey_${this.currentUserEmail}`) || "";
+        console.log("[MOUNTED] Wczytany klucz:", this.fernetKey);
+        this.fetchPasswords();
+      })
+      .catch(() => {
+        this.isLoggedIn = false;
+      });
   },
 };
 </script>

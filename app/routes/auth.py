@@ -1,9 +1,10 @@
 from datetime import timedelta
-from fastapi import APIRouter, Depends, HTTPException, status
+import os
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 from database import get_db
 from models.user import User
-from schemas.user import UserCreate, UserLogin, Token, UserOut
+from schemas.user import UserCreate, UserLogin, UserOut
 from security import (
     hash_password,
     verify_password,
@@ -36,9 +37,9 @@ def register(user: UserCreate, db: Session = Depends(get_db)):
     return new_user
 
 
-@router.post("/login", response_model=Token)
-def login(user: UserLogin, db: Session = Depends(get_db)):
-    """Login user and return JWT token"""
+@router.post("/login")
+def login(user: UserLogin, response: Response, db: Session = Depends(get_db)):
+    """Login user and set JWT token in HttpOnly cookie"""
     # Find user
     db_user = db.query(User).filter(User.email == user.email).first()
     if not db_user:
@@ -60,7 +61,25 @@ def login(user: UserLogin, db: Session = Depends(get_db)):
         data={"sub": db_user.email}, expires_delta=access_token_expires
     )
     
-    return {"access_token": access_token, "token_type": "bearer"}
+    is_secure_cookie = os.getenv("COOKIE_SECURE", "false").lower() == "true"
+    response.set_cookie(
+        key="access_token",
+        value=access_token,
+        httponly=True,
+        secure=is_secure_cookie,
+        samesite="lax",
+        max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        path="/",
+    )
+
+    return {"message": "Login successful"}
+
+
+@router.post("/logout")
+def logout(response: Response):
+    """Logout user by clearing auth cookie"""
+    response.delete_cookie(key="access_token", path="/")
+    return {"message": "Logout successful"}
 
 
 @router.get("/me", response_model=UserOut)

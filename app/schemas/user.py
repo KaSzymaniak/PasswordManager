@@ -19,6 +19,7 @@ class Token(BaseModel):
 class UserOut(BaseModel):
     id: int
     email: str
+    has_fernet_key: bool = False
 
     class Config:
         from_attributes = True
