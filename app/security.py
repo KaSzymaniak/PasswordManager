@@ -8,7 +8,7 @@ import jwt
 import bcrypt
 from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
-from database import get_db
+from app.database import get_db
 
 load_dotenv()
 
@@ -75,7 +75,7 @@ async def get_current_user(
     db: Session = Depends(get_db),
 ):
     """Verify JWT token and return current user"""
-    from models.user import User
+    from app.models.user import User
     
     credential_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,

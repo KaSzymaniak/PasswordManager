@@ -2,10 +2,10 @@ from datetime import timedelta
 import os
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
-from database import get_db
-from models.user import User
-from schemas.user import UserCreate, UserLogin, UserOut
-from security import (
+from app.database import get_db
+from app.models.user import User
+from app.schemas.user import UserCreate, UserLogin, UserOut
+from app.security import (
     hash_password,
     verify_password,
     create_access_token,

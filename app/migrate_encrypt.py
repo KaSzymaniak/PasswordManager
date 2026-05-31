@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
-from database import SessionLocal
-from models.password import PasswordEntry
-from security import encrypt_text, decrypt_text
+from app.database import SessionLocal
+from app.models.password import PasswordEntry
+from app.security import encrypt_text, decrypt_text
 
 db: Session = SessionLocal()
 rows = db.query(PasswordEntry).all()

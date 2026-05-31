@@ -5,8 +5,8 @@ from starlette.responses import Response
 from pathlib import Path
 import os
 import uvicorn
-from database import engine, Base, ensure_user_security_columns
-from routes import password, auth
+from app.database import engine, Base, ensure_user_security_columns
+from app.routes import password, auth
 
 app = FastAPI()
 

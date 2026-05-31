@@ -1,11 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, Body, status
 from sqlalchemy.orm import Session
 import hashlib
-from database import get_db
-from models.password import PasswordEntry
-from models.user import User
-from schemas.password import PasswordCreate, PasswordOut
-from security import encrypt_text, decrypt_text, get_current_user
+from app.database import get_db
+from app.models.password import PasswordEntry
+from app.models.user import User
+from app.schemas.password import PasswordCreate, PasswordOut
+from app.security import encrypt_text, decrypt_text, get_current_user
 from cryptography.fernet import Fernet, InvalidToken
 
 router = APIRouter(prefix="/passwords", tags=["passwords"])
