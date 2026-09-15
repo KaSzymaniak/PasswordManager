@@ -193,6 +193,7 @@ CREATE TABLE password_entries (
 ### Password Management
 - `GET /passwords` - Lista haseł użytkownika
 - `POST /passwords` - Dodaj nowe hasło (wymaga klucza Fernet)
+- `PUT /passwords/{id}` - Edytuj hasło (wymaga klucza Fernet)
 - `DELETE /passwords/{id}` - Usuń hasło
 - `POST /passwords/decrypt` - Odszyfruj hasło (wymaga klucza Fernet)
 
