@@ -31,6 +31,24 @@ def ensure_user_security_columns():
         if "fernet_key_hash" not in column_names:
             connection.execute(text("ALTER TABLE users ADD COLUMN fernet_key_hash VARCHAR"))
 
+        if "email_verified" not in column_names:
+            # DEFAULT 0 dotyczy nowych wierszy od teraz; istniejące konta
+            # (sprzed weryfikacji email) grandfatherujemy poniżej na 1.
+            connection.execute(text("ALTER TABLE users ADD COLUMN email_verified BOOLEAN DEFAULT 0"))
+            connection.execute(text("UPDATE users SET email_verified = 1"))
+
+        if "email_verification_code" not in column_names:
+            connection.execute(text("ALTER TABLE users ADD COLUMN email_verification_code VARCHAR"))
+
+        if "email_verification_expires" not in column_names:
+            connection.execute(text("ALTER TABLE users ADD COLUMN email_verification_expires DATETIME"))
+
+        if "password_reset_code" not in column_names:
+            connection.execute(text("ALTER TABLE users ADD COLUMN password_reset_code VARCHAR"))
+
+        if "password_reset_expires" not in column_names:
+            connection.execute(text("ALTER TABLE users ADD COLUMN password_reset_expires DATETIME"))
+
 # 🔑 Funkcja get_db - tego Ci brakuje!
 def get_db():
     db = SessionLocal()
