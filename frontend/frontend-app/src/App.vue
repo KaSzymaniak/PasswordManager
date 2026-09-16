@@ -4,10 +4,57 @@
     <div v-if="!isLoggedIn" class="auth-screen">
       <h1>Menadżer Haseł</h1>
       
-      <div v-if="isRegisterMode">
+      <div v-if="isVerifyMode">
+        <h2>Potwierdź adres email</h2>
+        <p>Wysłaliśmy kod na adres {{ verifyForm.email }}</p>
+        <input v-model="verifyForm.code" type="text" placeholder="Kod weryfikacyjny" />
+        <button @click="verifyEmail">Potwierdź</button>
+        <p><small><a href="#" @click.prevent="resendVerification">Wyślij kod ponownie</a></small></p>
+        <p v-if="verifyInfo" class="info">{{ verifyInfo }}</p>
+        <p v-if="verifyError" class="error">{{ verifyError }}</p>
+      </div>
+
+      <div v-else-if="isForgotPasswordMode">
+        <div v-if="forgotStep === 'request'">
+          <h2>Zapomniałem hasła</h2>
+          <input v-model="forgotForm.email" type="email" placeholder="Email" />
+          <button @click="requestPasswordReset">Wyślij kod resetu</button>
+        </div>
+        <div v-else>
+          <h2>Resetuj hasło</h2>
+          <input v-model="forgotForm.code" type="text" placeholder="Kod z emaila" />
+          <div class="password-field">
+            <input v-model="forgotForm.newPassword" :type="showResetPassword ? 'text' : 'password'" placeholder="Nowe hasło" />
+            <button type="button" class="toggle-visibility" @click="showResetPassword = !showResetPassword">{{ showResetPassword ? 'Ukryj' : 'Pokaż' }}</button>
+          </div>
+          <div class="password-requirements">
+            <span v-for="(check, key) in resetPasswordChecks" :key="key" class="requirement" :class="{ met: check.passed }">{{ check.label }}</span>
+          </div>
+          <div class="password-field">
+            <input v-model="forgotForm.confirmNewPassword" :type="showConfirmResetPassword ? 'text' : 'password'" placeholder="Powtórz nowe hasło" />
+            <button type="button" class="toggle-visibility" @click="showConfirmResetPassword = !showConfirmResetPassword">{{ showConfirmResetPassword ? 'Ukryj' : 'Pokaż' }}</button>
+          </div>
+          <button @click="resetPassword">Ustaw nowe hasło</button>
+        </div>
+        <p><small><a href="#" @click.prevent="isForgotPasswordMode = false; forgotStep = 'request'">Wróć do logowania</a></small></p>
+        <p v-if="forgotInfo" class="info">{{ forgotInfo }}</p>
+        <p v-if="forgotError" class="error">{{ forgotError }}</p>
+      </div>
+
+      <div v-else-if="isRegisterMode">
         <h2>Rejestracja</h2>
         <input v-model="authForm.email" type="email" placeholder="Email" />
-        <input v-model="authForm.password" type="password" placeholder="Hasło" />
+        <div class="password-field">
+          <input v-model="authForm.password" :type="showRegisterPassword ? 'text' : 'password'" placeholder="Hasło" />
+          <button type="button" class="toggle-visibility" @click="showRegisterPassword = !showRegisterPassword">{{ showRegisterPassword ? 'Ukryj' : 'Pokaż' }}</button>
+        </div>
+        <div class="password-requirements">
+          <span v-for="(check, key) in registerPasswordChecks" :key="key" class="requirement" :class="{ met: check.passed }">{{ check.label }}</span>
+        </div>
+        <div class="password-field">
+          <input v-model="authForm.confirmPassword" :type="showConfirmPassword ? 'text' : 'password'" placeholder="Powtórz hasło" />
+          <button type="button" class="toggle-visibility" @click="showConfirmPassword = !showConfirmPassword">{{ showConfirmPassword ? 'Ukryj' : 'Pokaż' }}</button>
+        </div>
         <button @click="register">Zarejestruj się</button>
         <p><small><a href="#" @click.prevent="isRegisterMode = false">Mam już konto</a></small></p>
       </div>
@@ -15,9 +62,16 @@
       <div v-else>
         <h2>Logowanie</h2>
         <input v-model="authForm.email" type="email" placeholder="Email" />
-        <input v-model="authForm.password" type="password" placeholder="Hasło" />
+        <div class="password-field">
+          <input v-model="authForm.password" :type="showLoginPassword ? 'text' : 'password'" placeholder="Hasło" />
+          <button type="button" class="toggle-visibility" @click="showLoginPassword = !showLoginPassword">{{ showLoginPassword ? 'Ukryj' : 'Pokaż' }}</button>
+        </div>
         <button @click="login">Zaloguj się</button>
-        <p><small><a href="#" @click.prevent="isRegisterMode = true">Utwórz konto</a></small></p>
+        <p>
+          <small><a href="#" @click.prevent="isRegisterMode = true">Utwórz konto</a></small>
+          &nbsp;|&nbsp;
+          <small><a href="#" @click.prevent="isForgotPasswordMode = true; forgotForm.email = authForm.email">Nie pamiętasz hasła?</a></small>
+        </p>
       </div>
 
       <p v-if="authError" class="error">{{ authError }}</p>
@@ -79,17 +133,66 @@ export default {
     return {
       isLoggedIn: false,
       isRegisterMode: false,
-      authForm: { email: "", password: "" },
+      authForm: { email: "", password: "", confirmPassword: "" },
       authError: "",
       passwords: [],
       decrypted: {},
       newPassword: { service: "", login: "", password: "" },
       fernetKey: "",
       currentUserEmail: "",
+
+      showLoginPassword: false,
+      showRegisterPassword: false,
+      showConfirmPassword: false,
+
+      isVerifyMode: false,
+      verifyForm: { email: "", code: "" },
+      verifyError: "",
+      verifyInfo: "",
+
+      isForgotPasswordMode: false,
+      forgotStep: "request",
+      forgotForm: { email: "", code: "", newPassword: "", confirmNewPassword: "" },
+      forgotError: "",
+      forgotInfo: "",
+      showResetPassword: false,
+      showConfirmResetPassword: false,
     };
   },
+  computed: {
+    registerPasswordChecks() {
+      return this.getPasswordChecks(this.authForm.password);
+    },
+    registerPasswordValid() {
+      return Object.values(this.registerPasswordChecks).every((c) => c.passed);
+    },
+    resetPasswordChecks() {
+      return this.getPasswordChecks(this.forgotForm.newPassword);
+    },
+    resetPasswordValid() {
+      return Object.values(this.resetPasswordChecks).every((c) => c.passed);
+    },
+  },
   methods: {
+    getPasswordChecks(password) {
+      return {
+        length: { label: "Min. 8 znaków", passed: password.length >= 8 },
+        lower: { label: "Mała litera", passed: /[a-z]/.test(password) },
+        upper: { label: "Wielka litera", passed: /[A-Z]/.test(password) },
+        digit: { label: "Cyfra", passed: /[0-9]/.test(password) },
+        special: { label: "Znak specjalny", passed: /[^a-zA-Z0-9]/.test(password) },
+      };
+    },
     async register() {
+      this.authError = "";
+      if (!this.registerPasswordValid) {
+        this.authError = "Hasło nie spełnia wymagań bezpieczeństwa";
+        return;
+      }
+      if (this.authForm.password !== this.authForm.confirmPassword) {
+        this.authError = "Hasła nie są identyczne";
+        return;
+      }
       try {
         const res = await axios.post(`${API_URL}/auth/register`, {
           email: this.authForm.email,
@@ -99,7 +202,11 @@ export default {
         this.isRegisterMode = false;
         // Nowe konto - pole klucza pozostaje puste
         this.fernetKey = "";
-        alert("Rejestracja udana! Zaloguj się.");
+        // Przejdź do ekranu wpisania kodu weryfikacyjnego
+        this.verifyForm = { email: this.authForm.email, code: "" };
+        this.verifyError = "";
+        this.verifyInfo = "";
+        this.isVerifyMode = true;
       } catch (err) {
         this.authError = err.response?.data?.detail || "Błąd rejestracji";
       }
@@ -114,15 +221,81 @@ export default {
         this.isLoggedIn = true;
         this.authError = "";
         this.currentUserEmail = email;
-        this.authForm = { email: "", password: "" };
+        this.authForm = { email: "", password: "", confirmPassword: "" };
         // Wczytaj klucz dla tego użytkownika z localStorage
         this.fernetKey = localStorage.getItem(`fernetKey_${this.currentUserEmail}`) || "";
-        console.log("[LOGIN] Email:", this.currentUserEmail);
-        console.log("[LOGIN] Wczytany klucz:", this.fernetKey);
-        console.log("[LOGIN] Klucz z localStorage:", localStorage.getItem(`fernetKey_${this.currentUserEmail}`));
         this.fetchPasswords();
       } catch (err) {
-        this.authError = err.response?.data?.detail || "Błędne dane logowania";
+        if (err.response?.status === 403) {
+          // Konto niezweryfikowane - przejdź do ekranu wpisania kodu
+          this.verifyForm = { email: this.authForm.email, code: "" };
+          this.verifyError = "";
+          this.verifyInfo = "";
+          this.isVerifyMode = true;
+        } else {
+          this.authError = err.response?.data?.detail || "Błędne dane logowania";
+        }
+      }
+    },
+    async verifyEmail() {
+      try {
+        await axios.post(`${API_URL}/auth/verify-email`, {
+          email: this.verifyForm.email,
+          code: this.verifyForm.code,
+        });
+        this.verifyError = "";
+        this.isVerifyMode = false;
+        alert("Email potwierdzony! Zaloguj się.");
+      } catch (err) {
+        this.verifyError = err.response?.data?.detail || "Błąd weryfikacji kodu";
+      }
+    },
+    async resendVerification() {
+      try {
+        await axios.post(`${API_URL}/auth/resend-verification`, {
+          email: this.verifyForm.email,
+        });
+        this.verifyError = "";
+        this.verifyInfo = "Kod wysłany ponownie";
+      } catch (err) {
+        this.verifyError = err.response?.data?.detail || "Błąd wysyłania kodu";
+      }
+    },
+    async requestPasswordReset() {
+      try {
+        await axios.post(`${API_URL}/auth/forgot-password`, {
+          email: this.forgotForm.email,
+        });
+        this.forgotError = "";
+        this.forgotInfo = "Jeśli konto istnieje, wysłaliśmy kod resetu";
+        this.forgotStep = "reset";
+      } catch (err) {
+        this.forgotError = err.response?.data?.detail || "Błąd wysyłania kodu";
+      }
+    },
+    async resetPassword() {
+      this.forgotError = "";
+      if (!this.resetPasswordValid) {
+        this.forgotError = "Hasło nie spełnia wymagań bezpieczeństwa";
+        return;
+      }
+      if (this.forgotForm.newPassword !== this.forgotForm.confirmNewPassword) {
+        this.forgotError = "Hasła nie są identyczne";
+        return;
+      }
+      try {
+        await axios.post(`${API_URL}/auth/reset-password`, {
+          email: this.forgotForm.email,
+          code: this.forgotForm.code,
+          new_password: this.forgotForm.newPassword,
+        });
+        this.forgotError = "";
+        this.isForgotPasswordMode = false;
+        this.forgotStep = "request";
+        this.forgotForm = { email: "", code: "", newPassword: "", confirmNewPassword: "" };
+        alert("Hasło zmienione! Zaloguj się nowym hasłem.");
+      } catch (err) {
+        this.forgotError = err.response?.data?.detail || "Błąd resetowania hasła";
       }
     },
     async logout() {
@@ -453,6 +626,50 @@ li button {
 .error {
   color: #ff0000;
   margin: 10px 0;
+}
+
+.info {
+  color: #28a745;
+  margin: 10px 0;
+}
+
+.password-field {
+  display: flex;
+  gap: 8px;
+  margin: 10px 0;
+}
+
+.password-field input {
+  flex: 1;
+  margin: 0;
+}
+
+.password-field .toggle-visibility {
+  display: block;
+  width: auto;
+  margin: 0;
+  padding: 12px 14px;
+  white-space: nowrap;
+}
+
+.password-requirements {
+  text-align: left;
+  margin: 4px 0 10px;
+}
+
+.requirement {
+  display: inline-block;
+  padding: 4px 8px;
+  margin: 3px 4px 3px 0;
+  border-radius: 12px;
+  font-size: 12px;
+  background: #eee;
+  color: #777;
+}
+
+.requirement.met {
+  background: #28a745;
+  color: white;
 }
 
 .no-passwords {
