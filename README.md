@@ -20,26 +20,26 @@ Aplikacja menadżera haseł umożliwiająca bezpieczne generowanie, przechowywan
 
 ### Szybki start (lokalnie)
 
-1. Zainstaluj backend:
-   - Wejdź do folderu `app/` i zainstaluj zależności z `requirements.txt`.
-   - Komendy: `cd app` → `py -m pip install -r requirements.txt`
+1. Zainstaluj backend (z korzenia repo):
+   - Komenda: `pip install -r requirements.txt`
 2. Zbuduj frontend:
    - Wejdź do folderu `frontend/frontend-app/`, zainstaluj zależności i wykonaj build.
    - Komendy: `cd frontend/frontend-app` → `npm install` → `npm run build`
-3. Uruchom backend:
-   - Uruchom `app/main.py`. Backend serwuje zbudowany frontend z `frontend/frontend-app/dist`.
-   - Komenda: `python app/main.py`
+3. Uruchom backend (z korzenia repo, nie z `app/`):
+   - Importy w kodzie mają postać `from app.database import ...`, więc `app` musi być pakietem widocznym z korzenia repo — `python app/main.py` tego nie zapewni.
+   - Komenda: `uvicorn app.main:app --reload`
+   - Backend serwuje zbudowany frontend z `frontend/frontend-app/dist`.
 4. Otwórz w przeglądarce:
    - `http://localhost:8000`
 
 ### Uruchomienie na Replit
 
-1. Zainstaluj zależności backendu z `app/requirements.txt`.
-   - Komendy: `cd app` → `pip install -r requirements.txt`
+1. Zainstaluj zależności backendu z korzenia repo.
+   - Komenda: `pip install -r requirements.txt`
 2. Zbuduj frontend w `frontend/frontend-app/` (powstaje `dist/`).
    - Komendy: `cd frontend/frontend-app` → `npm install` → `npm run build`
-3. W ustawieniach Replit uruchamiaj komendę:
-   - `python app/main.py`
+3. W ustawieniach Replit uruchamiaj komendę (z korzenia repo):
+   - `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
 4. Otwórz publiczny URL replita.
 
 ## 📖 Jak używać
@@ -92,3 +92,26 @@ Aplikacja menadżera haseł umożliwiająca bezpieczne generowanie, przechowywan
 - **Bezpieczeństwo**: System typu "zero-knowledge" - tylko Ty znasz swój klucz
 
 ## 📁 Struktura Projektu
+
+```
+PasswordManager/
+├── app/                        # Backend (FastAPI)
+│   ├── main.py                 # Punkt wejścia, CORS, middleware bezpieczeństwa
+│   ├── database.py             # Konfiguracja SQLAlchemy, migracje kolumn
+│   ├── security.py             # JWT, hashowanie, szyfrowanie Fernet
+│   ├── models/                 # Modele ORM (User, PasswordEntry)
+│   ├── routes/                 # Endpointy /auth i /passwords
+│   ├── schemas/                # Modele Pydantic
+│   └── requirements.txt
+├── frontend/
+│   └── frontend-app/           # Frontend (Vue 3 + Vite)
+│       ├── src/                # Komponenty, logika aplikacji
+│       ├── public/
+│       └── dist/               # Zbudowany frontend serwowany przez backend
+├── docs/
+│   ├── architecture.md         # Dokumentacja architektury i bezpieczeństwa
+│   ├── CHANGELOG.md
+│   └── MIGRATION.md
+├── requirements.txt             # Zależności backendu (korzeń repo)
+└── README.md
+```
