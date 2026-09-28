@@ -79,64 +79,34 @@
       <p v-if="authError" class="error">{{ authError }}</p>
     </div>
 
-    <!-- 🔒 PIN DO SEJFU (po zalogowaniu, przed wejściem do sejfu) -->
-    <div v-else-if="!isVaultPinSet" class="auth-screen">
-      <h1>Menadżer Haseł</h1>
-
-      <template v-if="!vaultSetupChecked">
-        <p>Ładowanie…</p>
-      </template>
-
-      <template v-else-if="isPinAlreadySetUp">
-        <h2>Wpisz PIN do sejfu</h2>
-        <p>Wpisz PIN, który ustawiłeś wcześniej — nie jest nigdzie zapisywany, więc wpisujesz go po każdym zalogowaniu.</p>
-        <div class="password-field">
-          <input v-model="pinForm.pin" :type="showPin ? 'text' : 'password'" inputmode="numeric" placeholder="PIN" />
-          <button type="button" class="toggle-visibility" @click="showPin = !showPin">{{ showPin ? 'Ukryj' : 'Pokaż' }}</button>
-        </div>
-        <button @click="enterVaultPin">Odblokuj sejf</button>
-        <p v-if="pinError" class="error">{{ pinError }}</p>
-        <button type="button" class="back-btn" @click="logout">Wyloguj</button>
-      </template>
-
-      <template v-else>
-        <h2>Ustaw PIN do sejfu</h2>
-        <p>
-          PIN chroni Twój sejf niezależnie od hasła logowania. Wpisujesz go za każdym razem
-          po zalogowaniu - <strong>nigdy nie jest zapisywany</strong> ani wysyłany na serwer.
-        </p>
-        <div class="password-field">
-          <input v-model="pinForm.pin" :type="showPin ? 'text' : 'password'" inputmode="numeric" placeholder="PIN (min. 4 cyfry)" />
-          <button type="button" class="toggle-visibility" @click="showPin = !showPin">{{ showPin ? 'Ukryj' : 'Pokaż' }}</button>
-        </div>
-        <div class="password-field">
-          <input v-model="pinForm.confirmPin" :type="showConfirmPin ? 'text' : 'password'" inputmode="numeric" placeholder="Powtórz PIN" />
-          <button type="button" class="toggle-visibility" @click="showConfirmPin = !showConfirmPin">{{ showConfirmPin ? 'Ukryj' : 'Pokaż' }}</button>
-        </div>
-        <button @click="setVaultPin">Zatwierdź PIN</button>
-        <p v-if="pinError" class="error">{{ pinError }}</p>
-        <button type="button" class="back-btn" @click="logout">Wyloguj</button>
-      </template>
-    </div>
-
-    <!-- 🔑 MAIN APP (after login + PIN set) -->
+    <!-- 🔑 MAIN APP (after login) -->
     <div v-else>
       <div class="header">
         <h1>Menadżer Haseł</h1>
         <button @click="logout" class="logout-btn">Wyloguj</button>
       </div>
 
+      <!-- PIN sejfu -->
+      <div class="key-section">
+        <label>PIN do sejfu:</label>
+        <div class="password-field">
+          <input v-model="vaultPin" :type="showPin ? 'text' : 'password'" inputmode="numeric" placeholder="PIN (min. 4 cyfry)" />
+          <button type="button" class="toggle-visibility" @click="showPin = !showPin">{{ showPin ? 'Ukryj' : 'Pokaż' }}</button>
+        </div>
+        <small>PIN żyje tylko w pamięci sesji — wpisujesz go po każdym zalogowaniu, nigdzie nie jest zapisywany.</small>
+      </div>
+
       <!-- Klucz odszyfrowania -->
       <div class="key-section">
         <label>Klucz Fernet (do szyfrowania i odszyfrowania haseł):</label>
-        <input v-model="fernetKey" type="text" :placeholder="hasFernetKey ? 'Wpisz wcześniej wygenerowany klucz Fernet' : 'Wpisz lub wygeneruj nowy klucz Fernet'" />
-        <button v-if="!hasFernetKey" @click="generateFernetKey" class="generate-btn">🔑 Generuj nowy klucz</button>
-        <small v-if="hasFernetKey">
-          To konto ma już przypisany klucz Fernet — wpisz ten sam, który zapisałeś przy generowaniu. Innego klucza nie da się użyć.
+        <input v-model="fernetKey" type="text" :placeholder="hasExistingPasswords ? 'Wpisz wcześniej wygenerowany klucz Fernet' : 'Wpisz lub wygeneruj nowy klucz Fernet'" />
+        <button v-if="!hasExistingPasswords" @click="generateFernetKey" class="generate-btn">🔑 Generuj nowy klucz</button>
+        <small v-if="hasExistingPasswords">
+          Masz już zapisane hasła — wpisz ten sam PIN i klucz Fernet, którymi je zaszyfrowałeś. Inna kombinacja ich nie odszyfruje.
         </small>
         <small v-else>
-          <strong>⚠️ WAŻNE:</strong> Zapisz ten klucz w bezpiecznym miejscu! Bez niego nie odszyfrujesz swoich haseł.
-          Klucz jest przechowywany lokalnie w przeglądarce.
+          <strong>⚠️ WAŻNE:</strong> Zapisz ten klucz w bezpiecznym miejscu! Bez niego (i bez PIN-u) nie odszyfrujesz swoich haseł.
+          Klucz żyje tylko w pamięci sesji przeglądarki.
         </small>
       </div>
 
@@ -185,6 +155,7 @@
 
 <script>
 import axios from "axios";
+import { deriveVaultKey, encryptText, decryptText } from "./crypto";
 
 // Backend na tym samym hoście
 const API_URL = window.location.origin;
@@ -202,7 +173,6 @@ export default {
       newPassword: { service: "", login: "", password: "" },
       fernetKey: "",
       currentUserEmail: "",
-      hasFernetKey: false,
       showFernetKeyModal: false,
       generatedFernetKey: "",
       fernetKeySavedConfirmed: false,
@@ -224,15 +194,9 @@ export default {
       showResetPassword: false,
       showConfirmResetPassword: false,
 
-      isVaultPinSet: false,
-      vaultSetupChecked: false,
-      isPinAlreadySetUp: false,
       vaultPin: "",
       vaultSalt: "",
-      pinForm: { pin: "", confirmPin: "" },
-      pinError: "",
       showPin: false,
-      showConfirmPin: false,
     };
   },
   computed: {
@@ -247,6 +211,9 @@ export default {
     },
     resetPasswordValid() {
       return Object.values(this.resetPasswordChecks).every((c) => c.passed);
+    },
+    hasExistingPasswords() {
+      return this.passwords.length > 0;
     },
   },
   methods: {
@@ -300,7 +267,6 @@ export default {
         this.authForm = { email: "", password: "", confirmPassword: "" };
         this.fetchPasswords();
         this.checkVaultSetup();
-        this.fetchUserInfo();
       } catch (err) {
         if (err.response?.status === 403) {
           // Konto niezweryfikowane - przejdź do ekranu wpisania kodu
@@ -383,53 +349,19 @@ export default {
       this.isLoggedIn = false;
       this.passwords = [];
       this.decrypted = {};
-      // Klucz Fernet żyje tylko w pamięci sesji, tak jak PIN - wylogowanie go czyści
+      // Klucz Fernet i PIN żyją tylko w pamięci sesji - wylogowanie je czyści
       this.fernetKey = "";
-      this.currentUserEmail = "";
-      this.hasFernetKey = false;
-      // PIN żyje tylko w pamięci sesji - wylogowanie zawsze go czyści
-      this.isVaultPinSet = false;
-      this.vaultSetupChecked = false;
-      this.isPinAlreadySetUp = false;
       this.vaultPin = "";
       this.vaultSalt = "";
-      this.pinForm = { pin: "", confirmPin: "" };
-      this.pinError = "";
+      this.currentUserEmail = "";
     },
     async checkVaultSetup() {
       try {
         const res = await axios.get(`${API_URL}/vault/salt`);
         this.vaultSalt = res.data.salt;
-        this.isPinAlreadySetUp = !res.data.is_new;
       } catch (err) {
         console.error("Błąd sprawdzania stanu sejfu:", err);
-      } finally {
-        this.vaultSetupChecked = true;
       }
-    },
-    setVaultPin() {
-      this.pinError = "";
-      if (!/^\d{4,}$/.test(this.pinForm.pin)) {
-        this.pinError = "PIN musi mieć min. 4 cyfry";
-        return;
-      }
-      if (this.pinForm.pin !== this.pinForm.confirmPin) {
-        this.pinError = "PIN-y nie są identyczne";
-        return;
-      }
-      this.vaultPin = this.pinForm.pin;
-      this.pinForm = { pin: "", confirmPin: "" };
-      this.isVaultPinSet = true;
-    },
-    enterVaultPin() {
-      this.pinError = "";
-      if (!/^\d{4,}$/.test(this.pinForm.pin)) {
-        this.pinError = "PIN musi mieć min. 4 cyfry";
-        return;
-      }
-      this.vaultPin = this.pinForm.pin;
-      this.pinForm = { pin: "", confirmPin: "" };
-      this.isVaultPinSet = true;
     },
     async fetchPasswords() {
       try {
@@ -440,20 +372,22 @@ export default {
       }
     },
     async addPassword() {
+      if (!/^\d{4,}$/.test(this.vaultPin)) {
+        alert("PIN musi mieć min. 4 cyfry!");
+        return;
+      }
       if (!this.fernetKey || this.fernetKey.trim() === "") {
         alert("Najpierw wpisz lub wygeneruj klucz Fernet!");
         return;
       }
-      console.log("[ADD] Klucz używany:", this.fernetKey);
-      console.log("[ADD] Długość klucza:", this.fernetKey.length);
-      console.log("[ADD] Hasło:", this.newPassword.password);
       try {
-        const response = await axios.post(`${API_URL}/passwords`, {
-          ...this.newPassword,
-          key: this.fernetKey.trim()
+        const vaultKey = await deriveVaultKey(this.vaultPin, this.fernetKey.trim(), this.vaultSalt);
+        const encryptedPassword = await encryptText(this.newPassword.password, vaultKey);
+        await axios.post(`${API_URL}/passwords`, {
+          service: this.newPassword.service,
+          login: this.newPassword.login,
+          password: encryptedPassword,
         });
-        console.log("[ADD] Response:", response.data);
-        console.log("[ADD] Zaszyfrowane hasło:", response.data.password);
         this.newPassword = { service: "", login: "", password: "" };
         this.fetchPasswords();
       } catch (err) {
@@ -481,28 +415,20 @@ export default {
       this.decryptPassword(id, encrypted);
     },
     async decryptPassword(id, encrypted) {
+      if (!/^\d{4,}$/.test(this.vaultPin)) {
+        alert("Wpisz PIN (min. 4 cyfry)!");
+        return;
+      }
       if (!this.fernetKey || this.fernetKey.trim() === "") {
         alert("Najpierw wpisz klucz Fernet!");
         return;
       }
-      console.log("[DECRYPT] ID:", id);
-      console.log("[DECRYPT] Klucz używany:", this.fernetKey);
-      console.log("[DECRYPT] Długość klucza:", this.fernetKey.length);
-      console.log("[DECRYPT] Zaszyfrowane hasło:", encrypted);
-      console.log("[DECRYPT] Długość zaszyfrowanego:", encrypted.length);
       try {
-        const res = await axios.post(
-          `${API_URL}/passwords/decrypt`,
-          { key: this.fernetKey.trim(), password: encrypted }
-        );
-        console.log("[DECRYPT] Response:", res.data);
-        console.log("[DECRYPT] Odszyfrowane hasło:", res.data.decrypted);
-        // Vue 3: nie używamy $set - reaktywność działa automatycznie
-        this.decrypted[id] = res.data.decrypted;
+        const vaultKey = await deriveVaultKey(this.vaultPin, this.fernetKey.trim(), this.vaultSalt);
+        this.decrypted[id] = await decryptText(encrypted, vaultKey);
       } catch (err) {
         console.error("[DECRYPT] BŁĄD:", err);
-        console.error("[DECRYPT] Response data:", err.response?.data);
-        alert(err.response?.data?.detail || "Błąd odszyfrowania - sprawdź czy klucz jest poprawny");
+        alert("Błąd odszyfrowania - sprawdź czy PIN i klucz Fernet są poprawne");
       }
     },
     generateFernetKey() {
@@ -525,17 +451,8 @@ export default {
     confirmFernetKeyModal() {
       if (!this.fernetKeySavedConfirmed) return;
       this.fernetKey = this.generatedFernetKey;
-      this.hasFernetKey = true;
       this.showFernetKeyModal = false;
       this.generatedFernetKey = "";
-    },
-    async fetchUserInfo() {
-      try {
-        const res = await axios.get(`${API_URL}/auth/me`);
-        this.hasFernetKey = res.data.has_fernet_key;
-      } catch (err) {
-        console.error("Błąd pobierania danych konta:", err);
-      }
     },
   },
   mounted() {
@@ -546,7 +463,6 @@ export default {
         // Pobierz email z odpowiedzi (zakładam, że endpoint /auth/me zwraca dane użytkownika)
         console.log("[MOUNTED] Response /auth/me:", response.data);
         this.currentUserEmail = response.data.email;
-        this.hasFernetKey = response.data.has_fernet_key;
         console.log("[MOUNTED] Email:", this.currentUserEmail);
         this.fetchPasswords();
         this.checkVaultSetup();
@@ -594,6 +510,7 @@ body {
   align-items: center;
   margin-bottom: 20px;
 }
+
 
 .logout-btn {
   background: #ff4444;
