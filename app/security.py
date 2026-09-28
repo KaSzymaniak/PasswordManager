@@ -3,7 +3,6 @@ import os
 from datetime import datetime, timedelta
 from typing import Optional
 from dotenv import load_dotenv
-from cryptography.fernet import Fernet
 import jwt
 import bcrypt
 from fastapi import Depends, HTTPException, Request, status
@@ -11,19 +10,6 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 
 load_dotenv()
-
-# ========== FERNET (szyfrowanie haseł użytkowników) ==========
-# Każdy użytkownik generuje i przechowuje swój własny klucz Fernet
-
-def encrypt_text(plain: str, key: str) -> str:
-    """Encrypt text using provided Fernet key"""
-    f = Fernet(key.encode())
-    return f.encrypt(plain.encode()).decode()
-
-def decrypt_text(token: str, key: str) -> str:
-    """Decrypt text using provided Fernet key"""
-    f = Fernet(key.encode())
-    return f.decrypt(token.encode()).decode()
 
 # ========== JWT (autentykacja użytkowników) ==========
 SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-change-in-production")

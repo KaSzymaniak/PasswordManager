@@ -1,5 +1,59 @@
 # Changelog - Historia Zmian
 
+## [3.0.0] - 2026-09-28
+
+### 🔐 Główne Zmiany - Szyfrowanie w Przeglądarce
+
+#### Zmieniono
+- **Szyfrowanie haseł**: Przeniesione w całości do przeglądarki (Web Crypto API,
+  AES-256-GCM) - serwer nigdy nie widzi klucza ani hasła w postaci jawnej
+- **Wyprowadzanie klucza**: PBKDF2-HMAC-SHA256 (310 000 iteracji) z PIN-u,
+  klucza Fernet i soli konta (`/vault/salt`)
+- **Backend**: `app/security.py` i `app/routes/password.py` nie zawierają już
+  żadnego kodu szyfrującego
+
+#### Usunięto
+- **Endpoint `POST /passwords/decrypt`**: niepotrzebny - odszyfrowanie jest
+  teraz w 100% po stronie klienta
+- **`encrypt_text()` / `decrypt_text()`** (`app/security.py`) i zależność od
+  `cryptography.fernet` w warstwie API
+- **Pole `key` w `PasswordCreate`**: klient nie wysyła już żadnego klucza do serwera
+
+#### Dodano
+- **`frontend/frontend-app/src/crypto.js`**: moduł `deriveVaultKey()` /
+  `encryptText()` / `decryptText()` oparty na natywnym Web Crypto API
+
+### 📁 Zmiany w Plikach
+
+#### Backend (`app/`)
+- **security.py**: usunięto `encrypt_text()`, `decrypt_text()`, import `Fernet`
+- **routes/password.py**: usunięto `ensure_user_fernet_key()`, `_hash_key()`,
+  endpoint `POST /passwords/decrypt`; `add_password`/`update_password` to
+  proste zapisy bez szyfrowania
+- **schemas/password.py**: usunięto pole `key: str` z `PasswordCreate`
+
+#### Frontend (`frontend/frontend-app/src/`)
+- **crypto.js** (nowy plik): `deriveVaultKey()`, `encryptText()`, `decryptText()`
+- **App.vue**:
+  - `addPassword()`/`decryptPassword()`: szyfrują/odszyfrowują lokalnie
+    przed/po wywołaniu API
+  - Usunięto `fetchUserInfo()` i pole `hasFernetKey`
+  - Dodano `computed: hasExistingPasswords` (`passwords.length > 0`) jako
+    zamiennik sygnału adaptacyjnego UI klucza Fernet
+
+### ⚠️ Breaking Changes
+- **Stare hasła są niekompatybilne**: wymagany reset bazy danych `passwords.db`
+- **Format zaszyfrowanych danych**: `base64(IV || ciphertext+tag)` zamiast
+  tokenu Fernet
+
+### 📊 Statystyki
+
+- Pliki zmienione: 5
+- Pliki dodane: 1 (`crypto.js`)
+- Endpoint usunięty: 1 (`POST /passwords/decrypt`)
+
+---
+
 ## [2.0.0] - 2026-03-02
 
 ### 🔐 Główne Zmiany - System Szyfrowania
