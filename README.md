@@ -2,10 +2,11 @@ Aplikacja menadżera haseł umożliwiająca bezpieczne generowanie, przechowywan
 
 ## � Bezpieczeństwo
 
-- **Szyfrowanie end-to-end**: Każdy użytkownik generuje swój własny klucz Fernet
-- **Zero-knowledge**: Serwer NIE ma dostępu do kluczy szyfrujących użytkowników
-- **Brak trwałego zapisu klucza**: Klucz żyje tylko w pamięci sesji przeglądarki - wpisujesz go po każdym zalogowaniu
-- ⚠️ **Ważne**: Zapisz klucz Fernet w bezpiecznym miejscu - bez niego nie odzyskasz haseł!
+- **Szyfrowanie end-to-end**: PIN + klucz Fernet + sól konta łączą się w przeglądarce (PBKDF2 → AES-GCM) w klucz sejfu
+- **Zero-knowledge**: Serwer NIE ma dostępu do PIN-u, klucza Fernet ani haseł w postaci jawnej
+- **Brak trwałego zapisu**: PIN i klucz Fernet żyją tylko w pamięci sesji przeglądarki - wpisujesz je po każdym zalogowaniu
+- **Konto odzyskiwalne, sejf nie**: hasło logowania możesz zresetować mailem; PIN i klucz Fernet - nie (zero-knowledge, patrz `docs/RECOVERY.md`)
+- ⚠️ **Ważne**: Zapisz klucz Fernet w bezpiecznym miejscu - bez niego (i bez PIN-u) nie odzyskasz haseł!
 
 ## 🛠️ Technologie
 
@@ -76,20 +77,21 @@ Aplikacja menadżera haseł umożliwiająca bezpieczne generowanie, przechowywan
 
 ## ⚠️ Ważne Informacje o Bezpieczeństwie
 
-### Klucz Fernet
+### PIN i Klucz Fernet
 
-- **Jeden użytkownik = jeden klucz**: Użyj tego samego klucza dla wszystkich swoich haseł
-- **Przechowywanie**: Klucz żyje tylko w pamięci sesji przeglądarki - nigdzie nie jest trwale zapisywany
-- **Backup**: **KONIECZNIE** zapisz klucz poza przeglądarką (w pliku, notatniku, innym menedżerze haseł)
-- **Utrata klucza**: Jeśli zgubisz klucz, **hasła są bezpowrotnie stracone**
-- **Każde logowanie**: Klucz trzeba wpisać ponownie po każdym zalogowaniu/odświeżeniu strony
+- **Dwa niezależne sekrety**: PIN (pamiętasz) + klucz Fernet (zapisujesz fizycznie) - oba potrzebne do odszyfrowania sejfu
+- **Przechowywanie**: Oba żyją tylko w pamięci sesji przeglądarki - nigdzie nie są trwale zapisywane
+- **Backup**: **KONIECZNIE** zapisz klucz Fernet poza przeglądarką (kartka, inny menedżer haseł); PIN zapamiętaj
+- **Utrata**: Jeśli zgubisz PIN lub klucz, **hasła są bezpowrotnie stracone** - to celowy kompromis bezpieczeństwa, nie da się tego obejść (szczegóły: `docs/RECOVERY.md`)
+- **Każde logowanie**: Oba trzeba wpisać ponownie po każdym zalogowaniu/odświeżeniu strony
 
 ### Co się dzieje z Twoimi danymi?
 
-- **Hasła**: Przechowywane **zaszyfrowane** w bazie SQLite na serwerze
-- **Klucz szyfrujący**: **NIE** jest przechowywany na serwerze, tylko w Twojej przeglądarce
-- **Administrator serwera**: **NIE MOŻE** odszyfrować Twoich haseł bez klucza
-- **Bezpieczeństwo**: System typu "zero-knowledge" - tylko Ty znasz swój klucz
+- **Hasła**: Przechowywane **zaszyfrowane** (AES-GCM) w bazie SQLite na serwerze - serwer widzi tylko nieprzejrzysty ciąg znaków
+- **PIN i klucz Fernet**: **NIE** są przechowywane na serwerze, tylko w Twojej przeglądarce, tylko na czas sesji
+- **Konto** (login/hasło): odzyskiwalne mailem (`docs/RECOVERY.md`) - to inna warstwa niż sejf
+- **Administrator serwera**: **NIE MOŻE** odszyfrować Twoich haseł bez PIN-u i klucza
+- **Bezpieczeństwo**: System typu "zero-knowledge" - tylko Ty znasz swój PIN i klucz
 
 ## 📁 Struktura Projektu
 
@@ -110,6 +112,7 @@ PasswordManager/
 │       └── dist/               # Zbudowany frontend serwowany przez backend
 ├── docs/
 │   ├── architecture.md         # Dokumentacja architektury i bezpieczeństwa
+│   ├── RECOVERY.md             # Model zagrożeń: co odzyskiwalne, co nie
 │   ├── CHANGELOG.md
 │   └── MIGRATION.md
 ├── requirements.txt             # Zależności backendu (korzeń repo)

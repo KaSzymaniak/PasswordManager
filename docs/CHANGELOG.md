@@ -54,6 +54,89 @@
 
 ---
 
+## [2.3.0] - 2026-09-24
+
+### 🔑 Główne Zmiany - UI Klucza Fernet
+
+#### Dodano
+- **Modal generowania klucza**: Wyświetla nowy klucz z ostrzeżeniem "to
+  jedyna kopia" i checkboxem "Zapisałem klucz w bezpiecznym miejscu"
+  blokującym zamknięcie do potwierdzenia
+- **Ekran adaptacyjny**: Jeśli konto ma już zapisane hasła, sekcja klucza
+  pokazuje tylko pole do wpisania istniejącego klucza (nie przycisk
+  generowania nowego)
+
+#### Usunięto
+- **Auto-zapis klucza w `localStorage`**: Klucz Fernet żyje odtąd tylko w
+  pamięci sesji przeglądarki, tak jak PIN — sprzeczne z modelem
+  zero-knowledge wcześniejsze zachowanie usunięte całkowicie
+
+### 📁 Zmiany w Plikach
+
+#### Frontend (`frontend/frontend-app/src/`)
+- **App.vue**: modal generowania klucza, `hasFernetKey`/`fetchUserInfo()`
+  (sygnał adaptacyjny UI), usunięcie `watch: fernetKey` i odczytu/zapisu
+  `localStorage`
+
+---
+
+## [2.2.0] - 2026-09-18
+
+### 🔒 Główne Zmiany - PIN do Sejfu
+
+#### Dodano
+- **Kolumna `kdf_salt`** (`User`) — losowa sól, niesekretna, tylko do KDF
+- **`GET /vault/salt`**: generuje/zwraca sól dla zalogowanego użytkownika,
+  `is_new` informuje frontend czy to pierwsze wywołanie
+- **Ekran PIN-u** w `App.vue`: PIN żyje wyłącznie w pamięci sesji, nigdy
+  nie jest zapisywany ani wysyłany do serwera w jawnej postaci
+
+### 📁 Zmiany w Plikach
+
+#### Backend (`app/`)
+- **models/user.py**: kolumna `kdf_salt`
+- **database.py**: migracja dodająca `kdf_salt`
+- **routes/vault.py** (nowy plik): `GET /vault/salt`
+
+#### Frontend (`frontend/frontend-app/src/`)
+- **App.vue**: ekran ustawiania/wpisywania PIN-u, stan sesji
+
+---
+
+## [2.1.0] - 2026-09-16
+
+### 📧 Główne Zmiany - Weryfikacja Email i Reset Hasła
+
+#### Dodano
+- **Weryfikacja email po rejestracji**: konto tworzone jako niezweryfikowane,
+  6-cyfrowy kod wysyłany mailem (fallback do logu serwera bez konfiguracji SMTP)
+- **Reset hasła**: `POST /auth/forgot-password` + `POST /auth/reset-password`,
+  generyczna odpowiedź niezależnie czy email istnieje (anty-enumeracja)
+- **Walidacja siły hasła**: min. 8 znaków, mała/wielka litera, cyfra, znak
+  specjalny — przy rejestracji i reset-password, z żywą checklistą w UI
+- **`app/email_utils.py`** (nowy plik): wysyłka SMTP (stdlib `smtplib`),
+  fallback do logu
+
+#### Zmieniono
+- **`login`**: blokuje logowanie niezweryfikowanym kontom (403)
+
+### 📁 Zmiany w Plikach
+
+#### Backend (`app/`)
+- **models/user.py**: `email_verified`, kody i daty wygaśnięcia weryfikacji/resetu
+- **database.py**: migracja z grandfatheringiem (`email_verified=1` dla
+  istniejących kont)
+- **email_utils.py** (nowy plik)
+- **routes/auth.py**: `verify-email`, `resend-verification`,
+  `forgot-password`, `reset-password`
+- **schemas/user.py**: nowe schematy żądań + walidator siły hasła
+
+#### Frontend (`frontend/frontend-app/src/`)
+- **App.vue**: ekrany weryfikacji kodu i resetu hasła, checklista wymagań
+  hasła, toggle pokaż/ukryj
+
+---
+
 ## [2.0.0] - 2026-03-02
 
 ### 🔐 Główne Zmiany - System Szyfrowania
