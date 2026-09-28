@@ -4,7 +4,7 @@ Aplikacja menadżera haseł umożliwiająca bezpieczne generowanie, przechowywan
 
 - **Szyfrowanie end-to-end**: Każdy użytkownik generuje swój własny klucz Fernet
 - **Zero-knowledge**: Serwer NIE ma dostępu do kluczy szyfrujących użytkowników
-- **Lokalne przechowywanie klucza**: Klucz jest zapisywany w localStorage przeglądarki
+- **Brak trwałego zapisu klucza**: Klucz żyje tylko w pamięci sesji przeglądarki - wpisujesz go po każdym zalogowaniu
 - ⚠️ **Ważne**: Zapisz klucz Fernet w bezpiecznym miejscu - bez niego nie odzyskasz haseł!
 
 ## 🛠️ Technologie
@@ -79,10 +79,10 @@ Aplikacja menadżera haseł umożliwiająca bezpieczne generowanie, przechowywan
 ### Klucz Fernet
 
 - **Jeden użytkownik = jeden klucz**: Użyj tego samego klucza dla wszystkich swoich haseł
-- **Przechowywanie**: Klucz jest automatycznie zapisywany w `localStorage` przeglądarki
+- **Przechowywanie**: Klucz żyje tylko w pamięci sesji przeglądarki - nigdzie nie jest trwale zapisywany
 - **Backup**: **KONIECZNIE** zapisz klucz poza przeglądarką (w pliku, notatniku, innym menedżerze haseł)
 - **Utrata klucza**: Jeśli zgubisz klucz, **hasła są bezpowrotnie stracone**
-- **Zmiana przeglądarki**: Jeśli zmienisz przeglądarkę/komputer, musisz wprowadzić klucz ponownie
+- **Każde logowanie**: Klucz trzeba wpisać ponownie po każdym zalogowaniu/odświeżeniu strony
 
 ### Co się dzieje z Twoimi danymi?
 

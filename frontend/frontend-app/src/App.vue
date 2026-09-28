@@ -129,12 +129,32 @@
       <!-- Klucz odszyfrowania -->
       <div class="key-section">
         <label>Klucz Fernet (do szyfrowania i odszyfrowania haseł):</label>
-        <input v-model="fernetKey" type="text" placeholder="Wpisz lub wygeneruj nowy klucz Fernet" />
-        <button @click="generateFernetKey" class="generate-btn">🔑 Generuj nowy klucz</button>
-        <small>
+        <input v-model="fernetKey" type="text" :placeholder="hasFernetKey ? 'Wpisz wcześniej wygenerowany klucz Fernet' : 'Wpisz lub wygeneruj nowy klucz Fernet'" />
+        <button v-if="!hasFernetKey" @click="generateFernetKey" class="generate-btn">🔑 Generuj nowy klucz</button>
+        <small v-if="hasFernetKey">
+          To konto ma już przypisany klucz Fernet — wpisz ten sam, który zapisałeś przy generowaniu. Innego klucza nie da się użyć.
+        </small>
+        <small v-else>
           <strong>⚠️ WAŻNE:</strong> Zapisz ten klucz w bezpiecznym miejscu! Bez niego nie odszyfrujesz swoich haseł.
           Klucz jest przechowywany lokalnie w przeglądarce.
         </small>
+      </div>
+
+      <!-- Modal ostrzegawczy przy generowaniu klucza Fernet -->
+      <div v-if="showFernetKeyModal" class="modal-overlay">
+        <div class="modal-box">
+          <h2>Twój nowy klucz Fernet</h2>
+          <p class="modal-warning">
+            ⚠️ To jedyna kopia tego klucza. Zapisz go fizycznie (kartka, inny menedżer haseł) —
+            bez niego nie odszyfrujesz swoich haseł, i nie da się go odzyskać.
+          </p>
+          <code class="modal-key">{{ generatedFernetKey }}</code>
+          <label class="modal-confirm">
+            <input type="checkbox" v-model="fernetKeySavedConfirmed" />
+            Zapisałem klucz w bezpiecznym miejscu
+          </label>
+          <button :disabled="!fernetKeySavedConfirmed" @click="confirmFernetKeyModal">Zamknij</button>
+        </div>
       </div>
 
       <!-- Formularz dodawania -->
@@ -182,6 +202,10 @@ export default {
       newPassword: { service: "", login: "", password: "" },
       fernetKey: "",
       currentUserEmail: "",
+      hasFernetKey: false,
+      showFernetKeyModal: false,
+      generatedFernetKey: "",
+      fernetKeySavedConfirmed: false,
 
       showLoginPassword: false,
       showRegisterPassword: false,
@@ -274,10 +298,9 @@ export default {
         this.authError = "";
         this.currentUserEmail = email;
         this.authForm = { email: "", password: "", confirmPassword: "" };
-        // Wczytaj klucz dla tego użytkownika z localStorage
-        this.fernetKey = localStorage.getItem(`fernetKey_${this.currentUserEmail}`) || "";
         this.fetchPasswords();
         this.checkVaultSetup();
+        this.fetchUserInfo();
       } catch (err) {
         if (err.response?.status === 403) {
           // Konto niezweryfikowane - przejdź do ekranu wpisania kodu
@@ -360,9 +383,10 @@ export default {
       this.isLoggedIn = false;
       this.passwords = [];
       this.decrypted = {};
-      // Wyczyść klucz z pamięci (ale zostaw w localStorage dla tego konta)
+      // Klucz Fernet żyje tylko w pamięci sesji, tak jak PIN - wylogowanie go czyści
       this.fernetKey = "";
       this.currentUserEmail = "";
+      this.hasFernetKey = false;
       // PIN żyje tylko w pamięci sesji - wylogowanie zawsze go czyści
       this.isVaultPinSet = false;
       this.vaultSetupChecked = false;
@@ -485,37 +509,32 @@ export default {
       // Generuj 32 losowe bajty
       const array = new Uint8Array(32);
       crypto.getRandomValues(array);
-      
-      console.log("[GEN] Losowe bajty (hex):", Array.from(array).map(b => b.toString(16).padStart(2, '0')).join(''));
-      
+
       // Konwertuj do base64 (poprawnie obsługując wszystkie bajty)
       let binary = '';
       for (let i = 0; i < array.length; i++) {
         binary += String.fromCharCode(array[i]);
       }
       const base64 = btoa(binary);
-      
-      console.log("[GEN] Klucz base64:", base64);
-      console.log("[GEN] Długość klucza:", base64.length);
-      
-      this.fernetKey = base64;
-      // Zapisz klucz dla tego konkretnego użytkownika
-      console.log("[GEN] Email użytkownika:", this.currentUserEmail);
-      console.log("[GEN] Zapisuję klucz jako:", `fernetKey_${this.currentUserEmail}`);
-      if (this.currentUserEmail) {
-        localStorage.setItem(`fernetKey_${this.currentUserEmail}`, base64);
-        console.log("[GEN] Klucz zapisany w localStorage");
-      } else {
-        console.error("[GEN] BRAK EMAIL - klucz NIE został zapisany!");
-      }
-      alert("✅ Klucz wygenerowany!\n\n⚠️ ZAPISZ GO W BEZPIECZNYM MIEJSCU!\n\nBez tego klucza nie odszyfrujesz swoich haseł.\n\nKlucz: " + base64);
+
+      // Nie zapisuj jeszcze nigdzie - dopiero po potwierdzeniu w modalu
+      this.generatedFernetKey = base64;
+      this.fernetKeySavedConfirmed = false;
+      this.showFernetKeyModal = true;
     },
-  },
-  watch: {
-    fernetKey(newKey) {
-      // Zapisuj klucz dla konkretnego użytkownika
-      if (newKey && this.currentUserEmail) {
-        localStorage.setItem(`fernetKey_${this.currentUserEmail}`, newKey);
+    confirmFernetKeyModal() {
+      if (!this.fernetKeySavedConfirmed) return;
+      this.fernetKey = this.generatedFernetKey;
+      this.hasFernetKey = true;
+      this.showFernetKeyModal = false;
+      this.generatedFernetKey = "";
+    },
+    async fetchUserInfo() {
+      try {
+        const res = await axios.get(`${API_URL}/auth/me`);
+        this.hasFernetKey = res.data.has_fernet_key;
+      } catch (err) {
+        console.error("Błąd pobierania danych konta:", err);
       }
     },
   },
@@ -527,10 +546,8 @@ export default {
         // Pobierz email z odpowiedzi (zakładam, że endpoint /auth/me zwraca dane użytkownika)
         console.log("[MOUNTED] Response /auth/me:", response.data);
         this.currentUserEmail = response.data.email;
+        this.hasFernetKey = response.data.has_fernet_key;
         console.log("[MOUNTED] Email:", this.currentUserEmail);
-        // Wczytaj klucz dla tego użytkownika
-        this.fernetKey = localStorage.getItem(`fernetKey_${this.currentUserEmail}`) || "";
-        console.log("[MOUNTED] Wczytany klucz:", this.fernetKey);
         this.fetchPasswords();
         this.checkVaultSetup();
       })
@@ -732,6 +749,62 @@ li button {
 
 .back-btn {
   background: #999;
+}
+
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-box {
+  background: white;
+  border-radius: 12px;
+  padding: 24px;
+  max-width: 480px;
+  width: 90%;
+  text-align: center;
+}
+
+.modal-warning {
+  color: #cc0000;
+  font-weight: bold;
+}
+
+.modal-key {
+  display: block;
+  background: #f0f0f0;
+  padding: 12px;
+  margin: 12px 0;
+  border-radius: 6px;
+  word-break: break-all;
+  font-family: monospace;
+}
+
+.modal-confirm {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: center;
+  margin: 12px 0;
+  text-align: left;
+}
+
+.modal-confirm input {
+  width: auto;
+  margin: 0;
+}
+
+.modal-box button:disabled {
+  background: #ccc;
+  cursor: not-allowed;
 }
 
 .back-btn:hover {
