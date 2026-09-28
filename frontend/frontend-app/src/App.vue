@@ -77,7 +77,27 @@
       <p v-if="authError" class="error">{{ authError }}</p>
     </div>
 
-    <!-- 🔑 MAIN APP (after login) -->
+    <!-- 🔒 USTAW PIN DO SEJFU (po zalogowaniu, przed wejściem do sejfu) -->
+    <div v-else-if="!isVaultPinSet" class="auth-screen">
+      <h1>Menadżer Haseł</h1>
+      <h2>Ustaw PIN do sejfu</h2>
+      <p>
+        PIN chroni Twój sejf niezależnie od hasła logowania. Wpisujesz go za każdym razem
+        po zalogowaniu — <strong>nigdy nie jest zapisywany</strong> ani wysyłany na serwer.
+      </p>
+      <div class="password-field">
+        <input v-model="pinForm.pin" :type="showPin ? 'text' : 'password'" inputmode="numeric" placeholder="PIN (min. 4 cyfry)" />
+        <button type="button" class="toggle-visibility" @click="showPin = !showPin">{{ showPin ? 'Ukryj' : 'Pokaż' }}</button>
+      </div>
+      <div class="password-field">
+        <input v-model="pinForm.confirmPin" :type="showConfirmPin ? 'text' : 'password'" inputmode="numeric" placeholder="Powtórz PIN" />
+        <button type="button" class="toggle-visibility" @click="showConfirmPin = !showConfirmPin">{{ showConfirmPin ? 'Ukryj' : 'Pokaż' }}</button>
+      </div>
+      <button @click="setVaultPin">Zatwierdź PIN</button>
+      <p v-if="pinError" class="error">{{ pinError }}</p>
+    </div>
+
+    <!-- 🔑 MAIN APP (after login + PIN set) -->
     <div v-else>
       <div class="header">
         <h1>Menadżer Haseł</h1>
@@ -157,6 +177,14 @@ export default {
       forgotInfo: "",
       showResetPassword: false,
       showConfirmResetPassword: false,
+
+      isVaultPinSet: false,
+      vaultPin: "",
+      vaultSalt: "",
+      pinForm: { pin: "", confirmPin: "" },
+      pinError: "",
+      showPin: false,
+      showConfirmPin: false,
     };
   },
   computed: {
@@ -310,6 +338,32 @@ export default {
       // Wyczyść klucz z pamięci (ale zostaw w localStorage dla tego konta)
       this.fernetKey = "";
       this.currentUserEmail = "";
+      // PIN żyje tylko w pamięci sesji - wylogowanie zawsze go czyści
+      this.isVaultPinSet = false;
+      this.vaultPin = "";
+      this.vaultSalt = "";
+      this.pinForm = { pin: "", confirmPin: "" };
+      this.pinError = "";
+    },
+    async setVaultPin() {
+      this.pinError = "";
+      if (!/^\d{4,}$/.test(this.pinForm.pin)) {
+        this.pinError = "PIN musi mieć min. 4 cyfry";
+        return;
+      }
+      if (this.pinForm.pin !== this.pinForm.confirmPin) {
+        this.pinError = "PIN-y nie są identyczne";
+        return;
+      }
+      try {
+        const res = await axios.get(`${API_URL}/vault/salt`);
+        this.vaultSalt = res.data.salt;
+        this.vaultPin = this.pinForm.pin;
+        this.pinForm = { pin: "", confirmPin: "" };
+        this.isVaultPinSet = true;
+      } catch (err) {
+        this.pinError = err.response?.data?.detail || "Błąd pobierania danych sejfu";
+      }
     },
     async fetchPasswords() {
       try {

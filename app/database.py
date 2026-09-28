@@ -49,6 +49,9 @@ def ensure_user_security_columns():
         if "password_reset_expires" not in column_names:
             connection.execute(text("ALTER TABLE users ADD COLUMN password_reset_expires DATETIME"))
 
+        if "kdf_salt" not in column_names:
+            connection.execute(text("ALTER TABLE users ADD COLUMN kdf_salt VARCHAR"))
+
 # 🔑 Funkcja get_db - tego Ci brakuje!
 def get_db():
     db = SessionLocal()

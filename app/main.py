@@ -8,7 +8,7 @@ from pathlib import Path
 import os
 import uvicorn
 from app.database import engine, Base, ensure_user_security_columns
-from app.routes import password, auth
+from app.routes import password, auth, vault
 
 app = FastAPI()
 
@@ -71,6 +71,7 @@ ensure_user_security_columns()
 # Rejestracja routerów API
 app.include_router(auth.router)
 app.include_router(password.router)
+app.include_router(vault.router)
 
 # Serowanie frontendu ze statycznych plików
 frontend_path = Path(__file__).parent.parent / "frontend" / "frontend-app" / "dist"

@@ -15,6 +15,7 @@ class User(Base):
     email_verification_expires = Column(DateTime, nullable=True)
     password_reset_code = Column(String, nullable=True)
     password_reset_expires = Column(DateTime, nullable=True)
+    kdf_salt = Column(String, nullable=True)
 
     @property
     def has_fernet_key(self) -> bool:
