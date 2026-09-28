@@ -12,6 +12,7 @@
         <p><small><a href="#" @click.prevent="resendVerification">Wyślij kod ponownie</a></small></p>
         <p v-if="verifyInfo" class="info">{{ verifyInfo }}</p>
         <p v-if="verifyError" class="error">{{ verifyError }}</p>
+        <button type="button" class="back-btn" @click="isVerifyMode = false">Wstecz</button>
       </div>
 
       <div v-else-if="isForgotPasswordMode">
@@ -35,6 +36,7 @@
             <button type="button" class="toggle-visibility" @click="showConfirmResetPassword = !showConfirmResetPassword">{{ showConfirmResetPassword ? 'Ukryj' : 'Pokaż' }}</button>
           </div>
           <button @click="resetPassword">Ustaw nowe hasło</button>
+          <button type="button" class="back-btn" @click="forgotStep = 'request'">Wstecz</button>
         </div>
         <p><small><a href="#" @click.prevent="isForgotPasswordMode = false; forgotStep = 'request'">Wróć do logowania</a></small></p>
         <p v-if="forgotInfo" class="info">{{ forgotInfo }}</p>
@@ -77,24 +79,44 @@
       <p v-if="authError" class="error">{{ authError }}</p>
     </div>
 
-    <!-- 🔒 USTAW PIN DO SEJFU (po zalogowaniu, przed wejściem do sejfu) -->
+    <!-- 🔒 PIN DO SEJFU (po zalogowaniu, przed wejściem do sejfu) -->
     <div v-else-if="!isVaultPinSet" class="auth-screen">
       <h1>Menadżer Haseł</h1>
-      <h2>Ustaw PIN do sejfu</h2>
-      <p>
-        PIN chroni Twój sejf niezależnie od hasła logowania. Wpisujesz go za każdym razem
-        po zalogowaniu — <strong>nigdy nie jest zapisywany</strong> ani wysyłany na serwer.
-      </p>
-      <div class="password-field">
-        <input v-model="pinForm.pin" :type="showPin ? 'text' : 'password'" inputmode="numeric" placeholder="PIN (min. 4 cyfry)" />
-        <button type="button" class="toggle-visibility" @click="showPin = !showPin">{{ showPin ? 'Ukryj' : 'Pokaż' }}</button>
-      </div>
-      <div class="password-field">
-        <input v-model="pinForm.confirmPin" :type="showConfirmPin ? 'text' : 'password'" inputmode="numeric" placeholder="Powtórz PIN" />
-        <button type="button" class="toggle-visibility" @click="showConfirmPin = !showConfirmPin">{{ showConfirmPin ? 'Ukryj' : 'Pokaż' }}</button>
-      </div>
-      <button @click="setVaultPin">Zatwierdź PIN</button>
-      <p v-if="pinError" class="error">{{ pinError }}</p>
+
+      <template v-if="!vaultSetupChecked">
+        <p>Ładowanie…</p>
+      </template>
+
+      <template v-else-if="isPinAlreadySetUp">
+        <h2>Wpisz PIN do sejfu</h2>
+        <p>Wpisz PIN, który ustawiłeś wcześniej — nie jest nigdzie zapisywany, więc wpisujesz go po każdym zalogowaniu.</p>
+        <div class="password-field">
+          <input v-model="pinForm.pin" :type="showPin ? 'text' : 'password'" inputmode="numeric" placeholder="PIN" />
+          <button type="button" class="toggle-visibility" @click="showPin = !showPin">{{ showPin ? 'Ukryj' : 'Pokaż' }}</button>
+        </div>
+        <button @click="enterVaultPin">Odblokuj sejf</button>
+        <p v-if="pinError" class="error">{{ pinError }}</p>
+        <button type="button" class="back-btn" @click="logout">Wyloguj</button>
+      </template>
+
+      <template v-else>
+        <h2>Ustaw PIN do sejfu</h2>
+        <p>
+          PIN chroni Twój sejf niezależnie od hasła logowania. Wpisujesz go za każdym razem
+          po zalogowaniu - <strong>nigdy nie jest zapisywany</strong> ani wysyłany na serwer.
+        </p>
+        <div class="password-field">
+          <input v-model="pinForm.pin" :type="showPin ? 'text' : 'password'" inputmode="numeric" placeholder="PIN (min. 4 cyfry)" />
+          <button type="button" class="toggle-visibility" @click="showPin = !showPin">{{ showPin ? 'Ukryj' : 'Pokaż' }}</button>
+        </div>
+        <div class="password-field">
+          <input v-model="pinForm.confirmPin" :type="showConfirmPin ? 'text' : 'password'" inputmode="numeric" placeholder="Powtórz PIN" />
+          <button type="button" class="toggle-visibility" @click="showConfirmPin = !showConfirmPin">{{ showConfirmPin ? 'Ukryj' : 'Pokaż' }}</button>
+        </div>
+        <button @click="setVaultPin">Zatwierdź PIN</button>
+        <p v-if="pinError" class="error">{{ pinError }}</p>
+        <button type="button" class="back-btn" @click="logout">Wyloguj</button>
+      </template>
     </div>
 
     <!-- 🔑 MAIN APP (after login + PIN set) -->
@@ -179,6 +201,8 @@ export default {
       showConfirmResetPassword: false,
 
       isVaultPinSet: false,
+      vaultSetupChecked: false,
+      isPinAlreadySetUp: false,
       vaultPin: "",
       vaultSalt: "",
       pinForm: { pin: "", confirmPin: "" },
@@ -253,6 +277,7 @@ export default {
         // Wczytaj klucz dla tego użytkownika z localStorage
         this.fernetKey = localStorage.getItem(`fernetKey_${this.currentUserEmail}`) || "";
         this.fetchPasswords();
+        this.checkVaultSetup();
       } catch (err) {
         if (err.response?.status === 403) {
           // Konto niezweryfikowane - przejdź do ekranu wpisania kodu
@@ -340,12 +365,25 @@ export default {
       this.currentUserEmail = "";
       // PIN żyje tylko w pamięci sesji - wylogowanie zawsze go czyści
       this.isVaultPinSet = false;
+      this.vaultSetupChecked = false;
+      this.isPinAlreadySetUp = false;
       this.vaultPin = "";
       this.vaultSalt = "";
       this.pinForm = { pin: "", confirmPin: "" };
       this.pinError = "";
     },
-    async setVaultPin() {
+    async checkVaultSetup() {
+      try {
+        const res = await axios.get(`${API_URL}/vault/salt`);
+        this.vaultSalt = res.data.salt;
+        this.isPinAlreadySetUp = !res.data.is_new;
+      } catch (err) {
+        console.error("Błąd sprawdzania stanu sejfu:", err);
+      } finally {
+        this.vaultSetupChecked = true;
+      }
+    },
+    setVaultPin() {
       this.pinError = "";
       if (!/^\d{4,}$/.test(this.pinForm.pin)) {
         this.pinError = "PIN musi mieć min. 4 cyfry";
@@ -355,15 +393,19 @@ export default {
         this.pinError = "PIN-y nie są identyczne";
         return;
       }
-      try {
-        const res = await axios.get(`${API_URL}/vault/salt`);
-        this.vaultSalt = res.data.salt;
-        this.vaultPin = this.pinForm.pin;
-        this.pinForm = { pin: "", confirmPin: "" };
-        this.isVaultPinSet = true;
-      } catch (err) {
-        this.pinError = err.response?.data?.detail || "Błąd pobierania danych sejfu";
+      this.vaultPin = this.pinForm.pin;
+      this.pinForm = { pin: "", confirmPin: "" };
+      this.isVaultPinSet = true;
+    },
+    enterVaultPin() {
+      this.pinError = "";
+      if (!/^\d{4,}$/.test(this.pinForm.pin)) {
+        this.pinError = "PIN musi mieć min. 4 cyfry";
+        return;
       }
+      this.vaultPin = this.pinForm.pin;
+      this.pinForm = { pin: "", confirmPin: "" };
+      this.isVaultPinSet = true;
     },
     async fetchPasswords() {
       try {
@@ -490,6 +532,7 @@ export default {
         this.fernetKey = localStorage.getItem(`fernetKey_${this.currentUserEmail}`) || "";
         console.log("[MOUNTED] Wczytany klucz:", this.fernetKey);
         this.fetchPasswords();
+        this.checkVaultSetup();
       })
       .catch(() => {
         this.isLoggedIn = false;
@@ -685,6 +728,14 @@ li button {
 .info {
   color: #28a745;
   margin: 10px 0;
+}
+
+.back-btn {
+  background: #999;
+}
+
+.back-btn:hover {
+  background: #777;
 }
 
 .password-field {

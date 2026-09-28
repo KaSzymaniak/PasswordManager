@@ -17,11 +17,11 @@ if not logger.handlers:
     logger.addHandler(_handler)
     logger.propagate = False
 
-SMTP_HOST = os.getenv("SMTP_HOST")
-SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
-SMTP_USERNAME = os.getenv("SMTP_USERNAME")
-SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
-SMTP_FROM = os.getenv("SMTP_FROM", "noreply@passwordmanager.local")
+SMTP_HOST = os.getenv("SMTP_HOST") or None
+SMTP_PORT = int(os.getenv("SMTP_PORT") or "587")
+SMTP_USERNAME = os.getenv("SMTP_USERNAME") or None
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD") or None
+SMTP_FROM = os.getenv("SMTP_FROM") or "noreply@passwordmanager.local"
 
 
 def _send_or_log(to_email: str, subject: str, body: str) -> None:

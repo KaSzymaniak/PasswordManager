@@ -27,7 +27,7 @@ Aplikacja menadżera haseł umożliwiająca bezpieczne generowanie, przechowywan
    - Komendy: `cd frontend/frontend-app` → `npm install` → `npm run build`
 3. Uruchom backend (z korzenia repo, nie z `app/`):
    - Importy w kodzie mają postać `from app.database import ...`, więc `app` musi być pakietem widocznym z korzenia repo — `python app/main.py` tego nie zapewni.
-   - Komenda: `uvicorn app.main:app --reload`
+   - Komenda: `python -m uvicorn app.main:app --reload --reload-dir app`
    - Backend serwuje zbudowany frontend z `frontend/frontend-app/dist`.
 4. Otwórz w przeglądarce:
    - `http://localhost:8000`
