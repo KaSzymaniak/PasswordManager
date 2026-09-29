@@ -1,144 +1,110 @@
 #!/usr/bin/env python3
 """
-Test API przez faktyczne wywołania HTTP
-Symuluje dokładnie to co robi użytkownik w przeglądarce
+Test API przez faktyczne wywołania HTTP (stdlib urllib, zero zależności).
+Symuluje pełny flow: rejestracja -> weryfikacja -> logowanie (cookie) ->
+sól sejfu -> dodanie/lista/usunięcie hasła (opaque ciphertext, bez klucza).
+
+Wymaga uruchomionego backendu na http://localhost:8000
+(python -m uvicorn app.main:app --reload --reload-dir app, z korzenia repo).
 """
 
-import requests
-import base64
+import http.cookiejar
+import json
 import os
-from cryptography.fernet import Fernet
+import sys
+import urllib.error
+import urllib.request
+
+# Windows console bywa w cp1250/cp1252 - bez tego emoji w printach wywalają się z UnicodeEncodeError
+sys.stdout.reconfigure(encoding="utf-8")
+
+from app.database import SessionLocal
+from app.models.user import User
 
 API_URL = "http://localhost:8000"
 
-def generate_fernet_key():
-    """Generuje klucz jak JavaScript (poprawiona wersja)"""
-    random_bytes = os.urandom(32)
-    return base64.b64encode(random_bytes).decode()
+cookie_jar = http.cookiejar.CookieJar()
+opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cookie_jar))
 
-def register_user(email, password):
-    """Rejestruje użytkownika"""
-    response = requests.post(f"{API_URL}/auth/register", json={
-        "email": email,
-        "password": password
-    })
-    return response
 
-def login_user(email, password):
-    """Loguje użytkownika i zwraca token"""
-    response = requests.post(f"{API_URL}/auth/login", json={
-        "email": email,
-        "password": password
-    })
-    if response.status_code == 200:
-        return response.json()["access_token"]
-    return None
+def request(method, path, json_body=None):
+    data = json.dumps(json_body).encode() if json_body is not None else None
+    req = urllib.request.Request(f"{API_URL}{path}", data=data, method=method)
+    if data is not None:
+        req.add_header("Content-Type", "application/json")
+    try:
+        with opener.open(req) as resp:
+            body = resp.read().decode()
+            return resp.status, (json.loads(body) if body else {})
+    except urllib.error.HTTPError as e:
+        body = e.read().decode()
+        return e.code, (json.loads(body) if body else {})
 
-def add_password(token, service, login, password, fernet_key):
-    """Dodaje hasło"""
-    response = requests.post(f"{API_URL}/passwords", 
-        json={
-            "service": service,
-            "login": login,
-            "password": password,
-            "key": fernet_key
-        },
-        headers={"Authorization": f"Bearer {token}"}
-    )
-    return response
 
-def decrypt_password(token, encrypted, fernet_key):
-    """Odszyfrowuje hasło"""
-    response = requests.post(f"{API_URL}/passwords/decrypt",
-        json={
-            "key": fernet_key,
-            "password": encrypted
-        },
-        headers={"Authorization": f"Bearer {token}"}
-    )
-    return response
+def get_verification_code(email):
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.email == email).first()
+        return user.email_verification_code if user else None
+    finally:
+        db.close()
+
 
 print("=" * 60)
-print("TEST API - Szyfrowanie i Odszyfrowanie")
+print("TEST API - pełny flow (rejestracja -> sejf -> hasła)")
 print("=" * 60)
 
-# 1. Wygeneruj klucz Fernet (jak w JavaScript)
-print("\n1. Generowanie klucza Fernet...")
-fernet_key = generate_fernet_key()
-print(f"   Klucz: {fernet_key}")
-print(f"   Długość: {len(fernet_key)} znaków")
-
-# Test czy klucz jest poprawny
-try:
-    f = Fernet(fernet_key.encode())
-    print("   ✅ Klucz jest poprawny dla Fernet")
-except Exception as e:
-    print(f"   ❌ BŁĄD: Klucz niepoprawny: {e}")
-    exit(1)
-
-# 2. Rejestracja użytkownika
-print("\n2. Rejestracja użytkownika...")
 test_email = f"test_{os.urandom(4).hex()}@example.com"
-test_password = "Test123!"
-response = register_user(test_email, test_password)
-if response.status_code == 200:
-    print(f"   ✅ Użytkownik zarejestrowany: {test_email}")
-else:
-    print(f"   ℹ️  Status: {response.status_code}, {response.text}")
+test_password = "Test123!ab"
 
-# 3. Logowanie
+print("\n1. Rejestracja użytkownika...")
+status, body = request("POST", "/auth/register", {"email": test_email, "password": test_password})
+assert status == 200, f"Rejestracja nieudana: {status} {body}"
+print(f"   ✅ Zarejestrowano: {test_email}")
+
+print("\n2. Weryfikacja email...")
+code = get_verification_code(test_email)
+assert code, "Brak kodu weryfikacyjnego w bazie"
+status, body = request("POST", "/auth/verify-email", {"email": test_email, "code": code})
+assert status == 200, f"Weryfikacja nieudana: {status} {body}"
+print(f"   ✅ Email zweryfikowany (kod: {code})")
+
 print("\n3. Logowanie...")
-token = login_user(test_email, test_password)
-if token:
-    print(f"   ✅ Zalogowano, token: {token[:20]}...")
-else:
-    print(f"   ❌ Błąd logowania")
-    exit(1)
+status, body = request("POST", "/auth/login", {"email": test_email, "password": test_password})
+assert status == 200, f"Logowanie nieudane: {status} {body}"
+print("   ✅ Zalogowano (cookie ustawione)")
 
-# 4. Dodaj hasło (z kluczem Fernet)
-print("\n4. Dodawanie hasła...")
-test_service = "Facebook"
-test_login = "user123"
-test_plain_password = "SuperSecretPassword123!"
+print("\n4. Pobranie soli sejfu...")
+status, body = request("GET", "/vault/salt")
+assert status == 200 and "salt" in body, f"Brak soli: {status} {body}"
+print(f"   ✅ Sól: {body['salt']} (is_new={body['is_new']})")
 
-response = add_password(token, test_service, test_login, test_plain_password, fernet_key)
-if response.status_code == 200:
-    data = response.json()
-    encrypted_password = data["password"]
-    password_id = data["id"]
-    print(f"   ✅ Hasło dodane, ID: {password_id}")
-    print(f"   Zaszyfrowane hasło: {encrypted_password}")
-else:
-    print(f"   ❌ BŁĄD: {response.status_code}, {response.text}")
-    exit(1)
+print("\n5. Dodanie hasła (opaque ciphertext, bez pola key)...")
+fake_ciphertext = "dGVzdG93eS1jaXBoZXJ0ZXh0LW9wYXF1ZQ=="  # nie prawdziwe AES-GCM, tylko sprawdzenie kontraktu API
+status, body = request("POST", "/passwords", {
+    "service": "TestService",
+    "login": "testuser",
+    "password": fake_ciphertext,
+})
+assert status == 200, f"Dodanie hasła nieudane: {status} {body}"
+password_id = body["id"]
+assert body["password"] == fake_ciphertext, "Serwer nie powinien modyfikować ciphertextu"
+print(f"   ✅ Dodano hasło, ID: {password_id}")
 
-# 5. Odszyfruj hasło TYM SAMYM kluczem
-print("\n5. Odszyfrowanie hasła (tym samym kluczem)...")
-response = decrypt_password(token, encrypted_password, fernet_key)
-if response.status_code == 200:
-    decrypted = response.json()["decrypted"]
-    print(f"   Odszyfrowane hasło: {decrypted}")
-    
-    if decrypted == test_plain_password:
-        print(f"   ✅ SUKCES! Hasło prawidłowo odszyfrowane!")
-    else:
-        print(f"   ❌ BŁĄD! Hasła się nie zgadzają!")
-        print(f"      Oryginał:     {test_plain_password}")
-        print(f"      Odszyfrowane: {decrypted}")
-else:
-    print(f"   ❌ BŁĄD: {response.status_code}")
-    print(f"   {response.json()}")
-    exit(1)
+print("\n6. Lista haseł...")
+status, body = request("GET", "/passwords")
+assert status == 200 and any(p["id"] == password_id for p in body), f"Hasło nie widoczne na liście: {status} {body}"
+print(f"   ✅ Hasło widoczne na liście ({len(body)} pozycji)")
 
-# 6. Test z niewłaściwym kluczem
-print("\n6. Test z niewłaściwym kluczem...")
-wrong_key = generate_fernet_key()
-response = decrypt_password(token, encrypted_password, wrong_key)
-if response.status_code == 400:
-    print(f"   ✅ Właściwie odrzucono niewłaściwy klucz")
-    print(f"   Komunikat: {response.json().get('detail', '')}")
-else:
-    print(f"   ❌ PROBLEM! Status: {response.status_code}")
+print("\n7. Sprawdzenie że /passwords/decrypt nie istnieje (usunięty w Kroku 4)...")
+status, _ = request("POST", "/passwords/decrypt", {"key": "x", "password": "y"})
+assert status in (404, 405), f"Endpoint /passwords/decrypt wciąż odpowiada: {status}"
+print(f"   ✅ Endpoint nie istnieje (status {status})")
+
+print("\n8. Usunięcie hasła...")
+status, body = request("DELETE", f"/passwords/{password_id}")
+assert status == 200, f"Usunięcie nieudane: {status} {body}"
+print("   ✅ Hasło usunięte")
 
 print("\n" + "=" * 60)
 print("TEST ZAKOŃCZONY POMYŚLNIE!")
