@@ -22,6 +22,7 @@ SMTP_PORT = int(os.getenv("SMTP_PORT") or "587")
 SMTP_USERNAME = os.getenv("SMTP_USERNAME") or None
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD") or None
 SMTP_FROM = os.getenv("SMTP_FROM") or "noreply@passwordmanager.local"
+SMTP_TIMEOUT_SECONDS = 10
 
 
 def _send_or_log(to_email: str, subject: str, body: str) -> None:
@@ -37,7 +38,7 @@ def _send_or_log(to_email: str, subject: str, body: str) -> None:
     message["To"] = to_email
 
     try:
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=SMTP_TIMEOUT_SECONDS) as server:
             server.starttls()
             if SMTP_USERNAME and SMTP_PASSWORD:
                 server.login(SMTP_USERNAME, SMTP_PASSWORD)

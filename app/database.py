@@ -20,16 +20,13 @@ Base = declarative_base()
 
 
 def ensure_user_security_columns():
-    """Lightweight migration for SQLite: ensure users.fernet_key_hash exists."""
+    """Lightweight migration for SQLite: ensure security-related users columns exist."""
     if "sqlite" not in DATABASE_URL:
         return
 
     with engine.begin() as connection:
         columns = connection.execute(text("PRAGMA table_info(users)")).fetchall()
         column_names = {column[1] for column in columns}
-
-        if "fernet_key_hash" not in column_names:
-            connection.execute(text("ALTER TABLE users ADD COLUMN fernet_key_hash VARCHAR"))
 
         if "email_verified" not in column_names:
             # DEFAULT 0 dotyczy nowych wierszy od teraz; istniejące konta

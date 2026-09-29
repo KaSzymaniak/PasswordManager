@@ -8,7 +8,6 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String, unique=True, index=True)
     hashed_password = Column(String)
-    fernet_key_hash = Column(String, nullable=True)
 
     email_verified = Column(Boolean, default=False, nullable=False, server_default="0")
     email_verification_code = Column(String, nullable=True)
@@ -16,7 +15,3 @@ class User(Base):
     password_reset_code = Column(String, nullable=True)
     password_reset_expires = Column(DateTime, nullable=True)
     kdf_salt = Column(String, nullable=True)
-
-    @property
-    def has_fernet_key(self) -> bool:
-        return bool(self.fernet_key_hash)
