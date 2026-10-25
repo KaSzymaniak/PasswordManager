@@ -1,12 +1,17 @@
 import secrets
 import base64
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.user import User
 from app.security import get_current_user
 
 router = APIRouter(prefix="/vault", tags=["vault"])
+
+
+class VerifierIn(BaseModel):
+    verifier: str
 
 
 @router.get("/salt")
@@ -19,4 +24,20 @@ def get_salt(current_user: User = Depends(get_current_user), db: Session = Depen
         db.commit()
         db.refresh(current_user)
 
-    return {"salt": current_user.kdf_salt, "is_new": is_new}
+    return {"salt": current_user.kdf_salt, "is_new": is_new, "verifier": current_user.vault_verifier}
+
+
+@router.put("/verifier")
+def set_verifier(
+    data: VerifierIn,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Store the vault verifier (opaque AES-GCM blob made in the browser). Write-once."""
+    if current_user.vault_verifier:
+        raise HTTPException(status_code=409, detail="Sejf ma już ustawiony weryfikator")
+
+    current_user.vault_verifier = data.verifier
+    db.add(current_user)
+    db.commit()
+    return {"message": "Verifier saved"}

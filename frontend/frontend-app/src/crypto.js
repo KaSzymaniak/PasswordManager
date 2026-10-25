@@ -4,6 +4,7 @@
 
 const PBKDF2_ITERATIONS = 310000; // OWASP-recommended floor for PBKDF2-SHA256 (2023+)
 const IV_LENGTH_BYTES = 12; // standard/recommended AES-GCM IV length
+const VERIFIER_PLAINTEXT = "vault-ok";
 
 function bytesToBase64(bytes) {
   let binary = "";
@@ -82,4 +83,21 @@ export async function decryptText(blobBase64, vaultKey) {
   const ciphertext = combined.slice(IV_LENGTH_BYTES);
   const plainBuf = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, vaultKey, ciphertext);
   return new TextDecoder().decode(plainBuf);
+}
+
+/**
+ * Vault verifier: a known constant encrypted with the vault key, stored on
+ * the server next to the salt. Lets the browser check PIN + Fernet key
+ * together before writing anything - never the PIN alone.
+ */
+export function createVerifier(vaultKey) {
+  return encryptText(VERIFIER_PLAINTEXT, vaultKey);
+}
+
+export async function checkVerifier(blobBase64, vaultKey) {
+  try {
+    return (await decryptText(blobBase64, vaultKey)) === VERIFIER_PLAINTEXT;
+  } catch {
+    return false;
+  }
 }
