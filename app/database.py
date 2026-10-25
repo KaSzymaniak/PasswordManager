@@ -49,6 +49,9 @@ def ensure_user_security_columns():
         if "kdf_salt" not in column_names:
             connection.execute(text("ALTER TABLE users ADD COLUMN kdf_salt VARCHAR"))
 
+        if "vault_verifier" not in column_names:
+            connection.execute(text("ALTER TABLE users ADD COLUMN vault_verifier VARCHAR"))
+
 # 🔑 Funkcja get_db - tego Ci brakuje!
 def get_db():
     db = SessionLocal()

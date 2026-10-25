@@ -15,3 +15,4 @@ class User(Base):
     password_reset_code = Column(String, nullable=True)
     password_reset_expires = Column(DateTime, nullable=True)
     kdf_salt = Column(String, nullable=True)
+    vault_verifier = Column(String, nullable=True)
