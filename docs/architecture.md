@@ -147,28 +147,3 @@ python -m uvicorn app.main:app --reload --reload-dir app
 cd frontend/frontend-app
 npm run build
 ```
-
-### Środowisko produkcyjne
-1. Ustaw stały `SECRET_KEY` w `.env` (bez niego klucz jest losowany przy
-   każdym starcie, a sesje wygasają po restarcie)
-2. Ustaw `COOKIE_SECURE=true` i używaj HTTPS (reverse proxy, np. nginx)
-3. Skonfiguruj SMTP (`SMTP_HOST`/`PORT`/`USERNAME`/`PASSWORD`/`FROM`)
-4. Regularnie wykonuj kopie zapasowe bazy danych
-5. Ogranicz liczbę żądań na poziomie reverse proxy (patrz niżej)
-
----
-
-## Plan rozwoju
-
-### Zrealizowane
-- Ciasteczka HttpOnly, restrykcyjny CORS
-- Nagłówki bezpieczeństwa + Content Security Policy
-- Weryfikacja email i reset hasła
-- Szyfrowanie po stronie klienta: PBKDF2 + AES-GCM, PIN sejfu, weryfikator sejfu
-
-### Planowane
-- **Ograniczenie liczby prób** - limit prób logowania i blokada konta;
-  dotyczy też 6-cyfrowych kodów weryfikacyjnych i kodów resetu
-- **2FA TOTP** - drugi składnik przy logowaniu
-- **Dziennik zdarzeń** - rejestrowanie logowań i nieudanych prób
-- **Logowanie przez Google** (OAuth2)
