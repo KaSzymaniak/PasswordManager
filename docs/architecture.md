@@ -1,177 +1,149 @@
-# Password Manager - Dokumentacja Architektury
+# Menedżer Haseł - Dokumentacja Architektury
 
-Ten plik opisuje **aktualny stan** systemu. Historia zmian (co i kiedy się
-zmieniło) jest w `docs/CHANGELOG.md` — nie duplikujemy jej tutaj.
+Dokument opisuje **aktualny stan** systemu. Historia zmian znajduje się w
+`docs/CHANGELOG.md`.
 
-## Przegląd Systemu
+## Przegląd systemu
 
-Password Manager to aplikacja webowa do bezpiecznego przechowywania i
+Menedżer Haseł to aplikacja webowa do bezpiecznego przechowywania i
 zarządzania hasłami, z szyfrowaniem end-to-end wykonywanym w całości w
-przeglądarce (model zero-knowledge — serwer nigdy nie widzi PIN-u, klucza
-Fernet ani hasła w postaci jawnej).
+przeglądarce (model zero-knowledge - serwer nigdy nie widzi PIN-u, klucza
+sejfu ani hasła w postaci jawnej).
 
 ### Technologie
 - **Backend**: FastAPI (Python 3.13+)
 - **Frontend**: Vue 3 + Vite
 - **Baza danych**: SQLite
-- **Szyfrowanie**: Web Crypto API w przeglądarce — PBKDF2-HMAC-SHA256
-  (310 000 iteracji) z PIN + klucz Fernet + sól konta → AES-256-GCM.
-  Backend nie wykonuje żadnej kryptografii haseł, tylko przechowuje
-  gotowy szyfrogram (opaque string).
-- **Autentykacja**: JWT w HttpOnly cookies
+- **Szyfrowanie**: Web Crypto API w przeglądarce - PBKDF2-HMAC-SHA256
+  (310 000 iteracji) z PIN + klucz sejfu + sól konta → AES-256-GCM.
+  Backend nie wykonuje żadnej kryptografii haseł, przechowuje wyłącznie
+  gotowy szyfrogram.
+- **Autentykacja**: JWT w ciasteczku HttpOnly
 
 ---
 
-## Model bezpieczeństwa — dwie niezależne warstwy
+## Model bezpieczeństwa - dwie niezależne warstwy
 
 - **Konto** (kto się loguje): email + hasło, weryfikacja emailem po
-  rejestracji, reset hasła przez kod mailem. Odzyskiwalne.
-- **Sejf** (co odszyfrowuje hasła): PIN + klucz Fernet + sól. Żyją tylko w
-  pamięci sesji przeglądarki, nigdy nie są zapisywane ani wysyłane do
-  serwera. Nieodzyskiwalne z premedytacją (zero-knowledge).
+  rejestracji, reset hasła kodem wysłanym mailem. Odzyskiwalne.
+- **Sejf** (co odszyfrowuje hasła): PIN + klucz sejfu + sól. PIN i klucz
+  istnieją tylko w pamięci sesji przeglądarki, nigdy nie są zapisywane ani
+  wysyłane do serwera. Nieodzyskiwalne z założenia (zero-knowledge).
 
 Pełny model zagrożeń i uzasadnienie: `docs/RECOVERY.md`.
 
+### Weryfikator sejfu
+
+Przy pierwszym odblokowaniu przeglądarka szyfruje kluczem szyfrującym znaną stałą
+i zapisuje wynik na serwerze (`PUT /vault/verifier`). Przy kolejnych
+odblokowaniach przeglądarka próbuje go odszyfrować - niepowodzenie oznacza
+błędną kombinację PIN + klucz sejfu. Dzięki temu błędna kombinacja jest
+odrzucana, zanim zostanie użyta do zaszyfrowania nowego hasła.
+
+Weryfikator sprawdza PIN i klucz sejfu **łącznie**. Nie da się nim
+zweryfikować samego PIN-u, więc nie umożliwia zgadywania PIN-u
+(10 000 kombinacji dla 4 cyfr) niezależnie od klucza sejfu. Z tego samego
+powodu komunikat błędu nie rozróżnia złego PIN-u od złego klucza.
+
 ---
 
-## Architektura Aplikacji
+## Architektura aplikacji
 
-### Backend Structure
+### Backend
 ```
 app/
-├── main.py              # FastAPI app, CORS, middleware, security headers
-├── database.py          # SQLAlchemy setup, lekka migracja kolumn (ALTER TABLE)
-├── security.py           # JWT, hashowanie haseł (bcrypt)
-├── email_utils.py        # Wysyłka kodów mailem (SMTP), fallback do logu
+├── main.py              # Aplikacja FastAPI, CORS, nagłówki bezpieczeństwa
+├── database.py          # Konfiguracja SQLAlchemy, migracja kolumn (ALTER TABLE)
+├── security.py          # JWT, hashowanie haseł (bcrypt)
+├── email_utils.py       # Wysyłka kodów mailem (SMTP) lub do logu serwera
 ├── models/
-│   ├── user.py          # User ORM model
-│   └── password.py       # PasswordEntry ORM model
+│   ├── user.py          # Model User
+│   └── password.py      # Model PasswordEntry
 ├── routes/
-│   ├── auth.py           # /auth/* endpoints
-│   ├── password.py       # /passwords/* endpoints
-│   └── vault.py           # /vault/* endpoints (sól KDF)
+│   ├── auth.py          # Endpointy /auth/*
+│   ├── password.py      # Endpointy /passwords/*
+│   └── vault.py         # Endpointy /vault/* (sól KDF, weryfikator)
 └── schemas/
     ├── user.py
     └── password.py
 ```
 
-### Frontend Structure
+### Frontend
 ```
 frontend/frontend-app/
 ├── src/
-│   ├── App.vue           # Główny komponent (Options API, bez routera)
-│   ├── crypto.js          # PBKDF2 + AES-GCM (Web Crypto API)
+│   ├── App.vue          # Główny komponent (Options API, bez routera)
+│   ├── crypto.js        # PBKDF2 + AES-GCM (Web Crypto API)
 │   ├── main.js
 │   └── style.css
-├── dist/                  # Production build (serwowany przez backend)
+├── dist/                # Build produkcyjny (serwowany przez backend)
 └── vite.config.js
 ```
 
-### Database Schema
+### Schemat bazy danych
 
 ```sql
--- Users table
 CREATE TABLE users (
     id INTEGER PRIMARY KEY,
     email VARCHAR UNIQUE,
-    hashed_password VARCHAR,
-    fernet_key_hash VARCHAR,              -- martwe pole od Kroku 4 (patrz niżej)
+    hashed_password VARCHAR,                -- bcrypt
     email_verified BOOLEAN DEFAULT 0,
     email_verification_code VARCHAR,
     email_verification_expires DATETIME,
     password_reset_code VARCHAR,
     password_reset_expires DATETIME,
-    kdf_salt VARCHAR                        -- sól do PBKDF2 (Web Crypto, frontend)
+    kdf_salt VARCHAR,                       -- sól PBKDF2 (base64, 16 bajtów)
+    vault_verifier VARCHAR                  -- weryfikator sejfu: base64(IV || AES-GCM)
 );
 
--- Passwords table
 CREATE TABLE passwords (
     id INTEGER PRIMARY KEY,
     user_id INTEGER,
     service VARCHAR,
     login VARCHAR,
-    password VARCHAR,                       -- opaque ciphertext: base64(IV || AES-GCM)
+    password VARCHAR,                       -- szyfrogram: base64(IV || AES-GCM)
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
 ```
 
-`fernet_key_hash`/`has_fernet_key` (kolumna + property w `User`) nie są już
-używane — od Kroku 4 backend nigdy nie widzi klucza Fernet, więc nie ma
-czego hashować. Zostawione jako nieużywane pole (sprzątanie odłożone),
-frontend liczy sygnał "czy masz już zapisane hasła" z `passwords.length`.
-
 ---
 
-## API Endpoints
+## Endpointy API
 
-### Authentication (`/auth`)
-- `POST /auth/register` — rejestracja (konto tworzone jako niezweryfikowane)
-- `POST /auth/login` — logowanie (ustawia HttpOnly cookie), blokuje
+### Autentykacja (`/auth`)
+- `POST /auth/register` - rejestracja (konto tworzone jako niezweryfikowane)
+- `POST /auth/login` - logowanie (ustawia ciasteczko HttpOnly), odrzuca
   niezweryfikowane konta (403)
-- `POST /auth/logout` — wylogowanie (usuwa cookie)
-- `GET /auth/me` — dane zalogowanego użytkownika
-- `POST /auth/verify-email` — potwierdzenie kodu wysłanego przy rejestracji
-- `POST /auth/resend-verification` — nowy kod weryfikacyjny
-- `POST /auth/forgot-password` — wysyła kod resetu (generyczna odpowiedź
-  niezależnie czy email istnieje — anty-enumeracja)
-- `POST /auth/reset-password` — ustawia nowe hasło kodem z maila
+- `POST /auth/logout` - wylogowanie (usuwa ciasteczko)
+- `GET /auth/me` - dane zalogowanego użytkownika
+- `POST /auth/verify-email` - potwierdzenie kodu wysłanego przy rejestracji
+- `POST /auth/resend-verification` - nowy kod weryfikacyjny
+- `POST /auth/forgot-password` - wysyła kod resetu (identyczna odpowiedź
+  niezależnie od istnienia konta - ochrona przed enumeracją)
+- `POST /auth/reset-password` - ustawia nowe hasło kodem z maila
 
-### Vault (`/vault`)
-- `GET /vault/salt` — zwraca/generuje sól KDF dla zalogowanego użytkownika
-  (`is_new` mówi frontendowi czy to pierwsze wywołanie)
+### Sejf (`/vault`)
+- `GET /vault/salt` - zwraca (przy pierwszym wywołaniu generuje) sól KDF
+  oraz weryfikator sejfu zalogowanego użytkownika
+- `PUT /vault/verifier` - zapisuje weryfikator sejfu (jednorazowo; ponowny
+  zapis zwraca 409)
 
-### Password Management (`/passwords`)
-- `GET /passwords` — lista haseł (opaque ciphertext, klient odszyfrowuje
-  lokalnie)
-- `POST /passwords` — dodaj hasło (ciphertext gotowy z przeglądarki)
-- `PUT /passwords/{id}` — edytuj hasło (ciphertext gotowy z przeglądarki)
-- `DELETE /passwords/{id}` — usuń hasło
-
-Brak `POST /passwords/decrypt` — usunięty w Kroku 4, odszyfrowanie w 100%
-po stronie klienta.
+### Hasła (`/passwords`)
+- `GET /passwords` - lista haseł (szyfrogramy, odszyfrowanie w przeglądarce)
+- `POST /passwords` - dodanie hasła (szyfrogram przygotowany w przeglądarce)
+- `PUT /passwords/{id}` - edycja hasła
+- `DELETE /passwords/{id}` - usunięcie hasła
 
 ---
 
-## Deployment
+## Wdrożenie
 
-### Development
+### Środowisko deweloperskie
 ```bash
-# Backend (z korzenia repo)
+# Backend (z katalogu głównego)
 python -m uvicorn app.main:app --reload --reload-dir app
 
-# Frontend build
+# Build frontendu
 cd frontend/frontend-app
 npm run build
 ```
-
-### Production Considerations
-1. Ustaw `COOKIE_SECURE=true` w `.env`
-2. Użyj HTTPS (nginx/Apache reverse proxy)
-3. Zmienna `SECRET_KEY` z bezpiecznego źródła
-4. Skonfiguruj realne SMTP (`SMTP_HOST`/`PORT`/`USERNAME`/`PASSWORD`/`FROM`)
-   z zaufanej, "rozgrzanej" domeny/konta — nowe konta bywają blokowane
-5. Backup bazy danych regularnie
-6. Rate limiting na poziomie reverse proxy (patrz Roadmap niżej)
-
----
-
-## Roadmap Bezpieczeństwa
-
-### ✅ Zrobione
-- HttpOnly cookies + CORS hardening
-- Security headers + CSP
-- Email verification + reset hasła
-- PIN sejfu + PBKDF2/AES-GCM zamiast serwerowego Fernet (docelowo planowano
-  Argon2id — zrealizowano PBKDF2 z Web Crypto API; klucz Fernet nadal jest
-  jednym ze składników wejściowych KDF, nie został w pełni zastąpiony
-  hasłem głównym — to świadoma decyzja z modelu bezpieczeństwa, nie
-  niedopatrzenie)
-
-### 🔜 Pending
-- **Rate Limiting + Account Lockouts** — limit prób logowania, blokada
-  konta po nieudanych próbach. Istotne też dla kodów weryfikacyjnych/
-  resetu (6 cyfr, brak dziś limitu prób zgadywania)
-- **2FA TOTP** — pyotp, QR code, weryfikacja przy logowaniu
-- **Audit Logs** — logowanie zdarzeń bezpieczeństwa (logowania, nieudane
-  próby), runbooki operacyjne
-- **Logowanie przez Google** (Krok 6, opcjonalne) — patrz `CLAUDE.md`

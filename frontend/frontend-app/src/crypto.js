@@ -1,9 +1,9 @@
-// Client-side vault encryption: PBKDF2 (derive) + AES-GCM (encrypt/decrypt).
-// The server only ever sees/stores an opaque base64 blob - it never
-// participates in encryption or decryption.
+// Szyfrowanie sejfu po stronie przeglądarki: PBKDF2 (wyprowadzenie klucza)
+// + AES-GCM (szyfrowanie/odszyfrowanie). Serwer przechowuje wyłącznie
+// szyfrogram w base64 i nie uczestniczy w żadnej operacji kryptograficznej.
 
-const PBKDF2_ITERATIONS = 310000; // OWASP-recommended floor for PBKDF2-SHA256 (2023+)
-const IV_LENGTH_BYTES = 12; // standard/recommended AES-GCM IV length
+const PBKDF2_ITERATIONS = 310000; // minimum zalecane przez OWASP dla PBKDF2-SHA256
+const IV_LENGTH_BYTES = 12; // standardowa długość wektora IV dla AES-GCM
 const VERIFIER_PLAINTEXT = "vault-ok";
 
 function bytesToBase64(bytes) {
@@ -24,12 +24,12 @@ function base64ToBytes(base64) {
 }
 
 /**
- * Derive a per-operation AES-256-GCM key from the user's PIN + Fernet key
- * and their per-account KDF salt (from GET /vault/salt).
- * Not cached anywhere - recompute on every encrypt/decrypt call.
+ * Wyprowadza klucz AES-256-GCM z PIN-u, klucza sejfu i soli konta
+ * (GET /vault/salt). Klucz nie jest nigdzie zapamiętywany - liczony jest
+ * od nowa przy każdej operacji szyfrowania/odszyfrowania.
  */
-export async function deriveVaultKey(pin, fernetKey, saltBase64) {
-  const passphrase = `${pin}:${fernetKey}`;
+export async function deriveEncryptionKey(pin, vaultKey, saltBase64) {
+  const passphrase = `${pin}:${vaultKey}`;
   const passphraseBytes = new TextEncoder().encode(passphrase);
   const saltBytes = base64ToBytes(saltBase64);
 
@@ -56,14 +56,14 @@ export async function deriveVaultKey(pin, fernetKey, saltBase64) {
 }
 
 /**
- * Encrypt plaintext with the given AES-GCM vault key.
- * Returns base64(iv || ciphertext+tag) - a single opaque string, safe to
- * store as-is in PasswordEntry.password.
+ * Szyfruje tekst kluczem szyfrującym (AES-GCM) z losowym IV.
+ * Zwraca base64(IV || szyfrogram+tag) - pojedynczy ciąg zapisywany
+ * bez zmian w PasswordEntry.password.
  */
-export async function encryptText(plainText, vaultKey) {
+export async function encryptText(plainText, encryptionKey) {
   const iv = crypto.getRandomValues(new Uint8Array(IV_LENGTH_BYTES));
   const plainBytes = new TextEncoder().encode(plainText);
-  const ciphertext = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, vaultKey, plainBytes);
+  const ciphertext = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, encryptionKey, plainBytes);
 
   const combined = new Uint8Array(iv.length + ciphertext.byteLength);
   combined.set(iv, 0);
@@ -72,31 +72,31 @@ export async function encryptText(plainText, vaultKey) {
 }
 
 /**
- * Decrypt a base64(iv || ciphertext+tag) blob with the given AES-GCM vault key.
- * Throws if the key/PIN is wrong (AES-GCM tag check fails) - callers should
- * catch and show a generic "wrong PIN/key" message; the browser gives no
- * finer-grained reason than a generic OperationError.
+ * Odszyfrowuje base64(IV || szyfrogram+tag) kluczem szyfrującym.
+ * Przy złym PIN-ie lub kluczu weryfikacja tagu AES-GCM się nie powiedzie
+ * i funkcja rzuci wyjątek (OperationError) - bez rozróżnienia, który
+ * składnik jest błędny.
  */
-export async function decryptText(blobBase64, vaultKey) {
+export async function decryptText(blobBase64, encryptionKey) {
   const combined = base64ToBytes(blobBase64);
   const iv = combined.slice(0, IV_LENGTH_BYTES);
   const ciphertext = combined.slice(IV_LENGTH_BYTES);
-  const plainBuf = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, vaultKey, ciphertext);
+  const plainBuf = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, encryptionKey, ciphertext);
   return new TextDecoder().decode(plainBuf);
 }
 
 /**
- * Vault verifier: a known constant encrypted with the vault key, stored on
- * the server next to the salt. Lets the browser check PIN + Fernet key
- * together before writing anything - never the PIN alone.
+ * Weryfikator sejfu: znana stała zaszyfrowana kluczem szyfrującym, przechowywana
+ * na serwerze obok soli. Pozwala sprawdzić poprawność PIN-u i klucza sejfu
+ * łącznie (nigdy samego PIN-u) przed zapisaniem czegokolwiek.
  */
-export function createVerifier(vaultKey) {
-  return encryptText(VERIFIER_PLAINTEXT, vaultKey);
+export function createVerifier(encryptionKey) {
+  return encryptText(VERIFIER_PLAINTEXT, encryptionKey);
 }
 
-export async function checkVerifier(blobBase64, vaultKey) {
+export async function checkVerifier(blobBase64, encryptionKey) {
   try {
-    return (await decryptText(blobBase64, vaultKey)) === VERIFIER_PLAINTEXT;
+    return (await decryptText(blobBase64, encryptionKey)) === VERIFIER_PLAINTEXT;
   } catch {
     return false;
   }

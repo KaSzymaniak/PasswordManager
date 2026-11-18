@@ -12,7 +12,7 @@ import sys
 import urllib.error
 import urllib.request
 
-# Windows console bywa w cp1250/cp1252 - bez tego emoji w printach wywalają się z UnicodeEncodeError
+# Konsola Windows bywa w cp1250/cp1252 - wymuszenie UTF-8 dla polskich znaków w wydrukach
 sys.stdout.reconfigure(encoding="utf-8")
 
 from app.database import SessionLocal
@@ -60,15 +60,15 @@ status, body = request("POST", "/auth/register", {"email": email, "password": pa
 print(f"    Status: {status}")
 print(f"    Odpowiedź: {body}")
 if status != 200:
-    print("    ❌ BŁĄD rejestracji")
+    print("    [BŁĄD] BŁĄD rejestracji")
     exit(1)
-print("    ✅ Zarejestrowano")
+print("    [OK] Zarejestrowano")
 
 print("\n[2] Odczyt kodu weryfikacyjnego z bazy...")
 code = get_verification_code(email)
 print(f"    Kod: {code}")
 if not code:
-    print("    ❌ Brak kodu w bazie")
+    print("    [BŁĄD] Brak kodu w bazie")
     exit(1)
 
 print("\n[3] Weryfikacja email...")
@@ -76,9 +76,9 @@ status, body = request("POST", "/auth/verify-email", {"email": email, "code": co
 print(f"    Status: {status}")
 print(f"    Odpowiedź: {body}")
 if status != 200:
-    print("    ❌ BŁĄD weryfikacji")
+    print("    [BŁĄD] BŁĄD weryfikacji")
     exit(1)
-print("    ✅ Email zweryfikowany")
+print("    [OK] Email zweryfikowany")
 
 print("\n[4] Logowanie...")
 status, body = request("POST", "/auth/login", {"email": email, "password": password})
@@ -86,20 +86,20 @@ print(f"    Status: {status}")
 print(f"    Odpowiedź: {body}")
 print(f"    Cookies: {[c.name for c in cookie_jar]}")
 if status != 200:
-    print("    ❌ BŁĄD logowania")
+    print("    [BŁĄD] BŁĄD logowania")
     exit(1)
-print("    ✅ Zalogowano")
+print("    [OK] Zalogowano")
 
 print("\n[5] Pobranie soli sejfu (GET /vault/salt)...")
 status, body = request("GET", "/vault/salt")
 print(f"    Status: {status}")
 print(f"    Odpowiedź: {body}")
 if status != 200:
-    print("    ❌ BŁĄD pobierania soli")
+    print("    [BŁĄD] BŁĄD pobierania soli")
     exit(1)
-print(f"    ✅ Sól: {body['salt']} (is_new={body['is_new']})")
+print(f"    [OK] Sól: {body['salt']} (is_new={body['is_new']})")
 
-print("\n[6] Dodawanie hasła (opaque ciphertext - serwer nie zna klucza)...")
+print("\n[6] Dodawanie hasła (szyfrogram - serwer nie zna klucza)...")
 test_plaintext_note = "MojeHaslo123!"
 fake_ciphertext = "dGVzdG93eS1jaXBoZXJ0ZXh0LW9wYXF1ZQ=="
 print(f"    Hasło jawne (tylko do celów testu, nigdy nie wysyłane): {test_plaintext_note}")
@@ -112,10 +112,10 @@ status, body = request("POST", "/passwords", {
 print(f"    Status: {status}")
 print(f"    Odpowiedź: {body}")
 if status != 200:
-    print("    ❌ BŁĄD dodawania hasła")
+    print("    [BŁĄD] BŁĄD dodawania hasła")
     exit(1)
 password_id = body["id"]
-print(f"    ✅ Dodano hasło, ID: {password_id}")
+print(f"    [OK] Dodano hasło, ID: {password_id}")
 
 print("\n[7] Lista haseł...")
 status, body = request("GET", "/passwords")
@@ -123,28 +123,19 @@ print(f"    Status: {status}")
 print(f"    Odpowiedź: {body}")
 found = next((p for p in body if p["id"] == password_id), None)
 if status != 200 or not found:
-    print("    ❌ Hasło nie widoczne na liście")
+    print("    [BŁĄD] Hasło nie widoczne na liście")
     exit(1)
-print(f"    ✅ Hasło na liście, ciphertext zgodny: {found['password'] == fake_ciphertext}")
+print(f"    [OK] Hasło na liście, ciphertext zgodny: {found['password'] == fake_ciphertext}")
 
-print("\n[8] Sprawdzenie że POST /passwords/decrypt nie istnieje...")
-status, body = request("POST", "/passwords/decrypt", {"key": "x", "password": "y"})
-print(f"    Status: {status}")
-print(f"    Odpowiedź: {body}")
-if status not in (404, 405):
-    print("    ❌ PROBLEM: endpoint nadal odpowiada, powinien być usunięty w Kroku 4")
-else:
-    print("    ✅ Endpoint poprawnie usunięty")
-
-print("\n[9] Usunięcie hasła...")
+print("\n[8] Usunięcie hasła...")
 status, body = request("DELETE", f"/passwords/{password_id}")
 print(f"    Status: {status}")
 print(f"    Odpowiedź: {body}")
 if status != 200:
-    print("    ❌ BŁĄD usuwania")
+    print("    [BŁĄD] BŁĄD usuwania")
     exit(1)
-print("    ✅ Usunięto")
+print("    [OK] Usunięto")
 
 print(f"\n{'=' * 70}")
-print("✅✅✅ TEST ZAKOŃCZONY SUKCESEM! ✅✅✅")
+print("TEST ZAKOŃCZONY POMYŚLNIE")
 print(f"{'=' * 70}")

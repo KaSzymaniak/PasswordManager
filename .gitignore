@@ -1,63 +1,43 @@
-Python,
+# Python
 __pycache__/
 *.py[cod]
-*.sqlite3
-*.db
-*.log
-*.env
-*.DS_Store
 
-Virtual env,
+# Środowiska wirtualne
 venv/
 env/
 ENV/
 .venv/
 
-FastAPI + Uvicorn,
-instance/
-*.pid
+# Zmienne środowiskowe
+.env
+.env.*
 
-SQLite DB,
+# Baza danych SQLite
 *.db
 *.sqlite3
 
-Vue/Vite,
+# Vue / Vite
 node_modules/
 dist/
 .vite/
 *.local
 
-IDEs and editors,
+# Logi
+*.log
+*.pid
+
+# IDE i edytory
 .idea/
 .vscode/
 *.swp
 *.swo
 
-OS,
+# System
 .DS_Store
 Thumbs.db
 
-Logs,
-.log
-
-Coverage reports,
+# Raporty testów
 htmlcov/
 coverage.xml
 .cache/
-pytest_cache/
-
-.env
-
-npm debug files,
-npm-debug.log
-yarn-debug.log*
-yarn-error.log*
-
-dotenv,
-.env
-.env.* 
-app/.env
-app/venv/
-app/passwords.db
-frontend-app/node_modules/
-
+.pytest_cache/

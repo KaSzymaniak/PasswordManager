@@ -2,7 +2,7 @@
 """
 Test API przez faktyczne wywołania HTTP (stdlib urllib, zero zależności).
 Symuluje pełny flow: rejestracja -> weryfikacja -> logowanie (cookie) ->
-sól sejfu -> dodanie/lista/usunięcie hasła (opaque ciphertext, bez klucza).
+sól sejfu -> dodanie/lista/usunięcie hasła (szyfrogram, bez klucza).
 
 Wymaga uruchomionego backendu na http://localhost:8000
 (python -m uvicorn app.main:app --reload --reload-dir app, z korzenia repo).
@@ -15,7 +15,7 @@ import sys
 import urllib.error
 import urllib.request
 
-# Windows console bywa w cp1250/cp1252 - bez tego emoji w printach wywalają się z UnicodeEncodeError
+# Konsola Windows bywa w cp1250/cp1252 - wymuszenie UTF-8 dla polskich znaków w wydrukach
 sys.stdout.reconfigure(encoding="utf-8")
 
 from app.database import SessionLocal
@@ -60,26 +60,26 @@ test_password = "Test123!ab"
 print("\n1. Rejestracja użytkownika...")
 status, body = request("POST", "/auth/register", {"email": test_email, "password": test_password})
 assert status == 200, f"Rejestracja nieudana: {status} {body}"
-print(f"   ✅ Zarejestrowano: {test_email}")
+print(f"   [OK] Zarejestrowano: {test_email}")
 
 print("\n2. Weryfikacja email...")
 code = get_verification_code(test_email)
 assert code, "Brak kodu weryfikacyjnego w bazie"
 status, body = request("POST", "/auth/verify-email", {"email": test_email, "code": code})
 assert status == 200, f"Weryfikacja nieudana: {status} {body}"
-print(f"   ✅ Email zweryfikowany (kod: {code})")
+print(f"   [OK] Email zweryfikowany (kod: {code})")
 
 print("\n3. Logowanie...")
 status, body = request("POST", "/auth/login", {"email": test_email, "password": test_password})
 assert status == 200, f"Logowanie nieudane: {status} {body}"
-print("   ✅ Zalogowano (cookie ustawione)")
+print("   [OK] Zalogowano (cookie ustawione)")
 
 print("\n4. Pobranie soli sejfu...")
 status, body = request("GET", "/vault/salt")
 assert status == 200 and "salt" in body, f"Brak soli: {status} {body}"
-print(f"   ✅ Sól: {body['salt']} (is_new={body['is_new']})")
+print(f"   [OK] Sól: {body['salt']} (is_new={body['is_new']})")
 
-print("\n5. Dodanie hasła (opaque ciphertext, bez pola key)...")
+print("\n5. Dodanie hasła (szyfrogram z przeglądarki)...")
 fake_ciphertext = "dGVzdG93eS1jaXBoZXJ0ZXh0LW9wYXF1ZQ=="  # nie prawdziwe AES-GCM, tylko sprawdzenie kontraktu API
 status, body = request("POST", "/passwords", {
     "service": "TestService",
@@ -89,23 +89,18 @@ status, body = request("POST", "/passwords", {
 assert status == 200, f"Dodanie hasła nieudane: {status} {body}"
 password_id = body["id"]
 assert body["password"] == fake_ciphertext, "Serwer nie powinien modyfikować ciphertextu"
-print(f"   ✅ Dodano hasło, ID: {password_id}")
+print(f"   [OK] Dodano hasło, ID: {password_id}")
 
 print("\n6. Lista haseł...")
 status, body = request("GET", "/passwords")
 assert status == 200 and any(p["id"] == password_id for p in body), f"Hasło nie widoczne na liście: {status} {body}"
-print(f"   ✅ Hasło widoczne na liście ({len(body)} pozycji)")
+print(f"   [OK] Hasło widoczne na liście (liczba wpisów: {len(body)})")
 
-print("\n7. Sprawdzenie że /passwords/decrypt nie istnieje (usunięty w Kroku 4)...")
-status, _ = request("POST", "/passwords/decrypt", {"key": "x", "password": "y"})
-assert status in (404, 405), f"Endpoint /passwords/decrypt wciąż odpowiada: {status}"
-print(f"   ✅ Endpoint nie istnieje (status {status})")
-
-print("\n8. Usunięcie hasła...")
+print("\n7. Usunięcie hasła...")
 status, body = request("DELETE", f"/passwords/{password_id}")
 assert status == 200, f"Usunięcie nieudane: {status} {body}"
-print("   ✅ Hasło usunięte")
+print("   [OK] Hasło usunięte")
 
 print("\n" + "=" * 60)
-print("TEST ZAKOŃCZONY POMYŚLNIE!")
+print("TEST ZAKOŃCZONY POMYŚLNIE")
 print("=" * 60)

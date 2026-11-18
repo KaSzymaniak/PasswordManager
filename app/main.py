@@ -22,7 +22,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         message = message[len("Value error, "):]
     return JSONResponse(status_code=422, content={"detail": message})
 
-# 🔒 Obsługa CORS
+# Obsługa CORS
 allowed_origins = os.getenv("CORS_ALLOWED_ORIGINS", "http://localhost:8000,http://127.0.0.1:8000")
 origins = [origin.strip() for origin in allowed_origins.split(",") if origin.strip()]
 
@@ -73,7 +73,7 @@ app.include_router(auth.router)
 app.include_router(password.router)
 app.include_router(vault.router)
 
-# Serowanie frontendu ze statycznych plików
+# Serwowanie zbudowanego frontendu (pliki statyczne)
 frontend_path = Path(__file__).parent.parent / "frontend" / "frontend-app" / "dist"
 if frontend_path.exists():
     app.mount("/", StaticFiles(directory=str(frontend_path), html=True), name="static")

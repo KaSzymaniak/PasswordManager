@@ -27,22 +27,21 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 def _generate_code() -> str:
-    """Generate a 6-digit numeric one-time code."""
+    """Generuje jednorazowy 6-cyfrowy kod."""
     return f"{secrets.randbelow(1_000_000):06d}"
 
 
 @router.post("/register", response_model=UserOut)
 def register(user: UserCreate, db: Session = Depends(get_db)):
-    """Register new user"""
-    # Check if user exists
+    """Rejestracja nowego użytkownika."""
     existing_user = db.query(User).filter(User.email == user.email).first()
     if existing_user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email already registered"
+            detail="Ten adres email jest już zarejestrowany"
         )
     
-    # Create new user (unverified until email is confirmed)
+    # Konto pozostaje niezweryfikowane do czasu potwierdzenia kodu z emaila
     hashed_password = hash_password(user.password)
     code = _generate_code()
     new_user = User(
@@ -63,29 +62,26 @@ def register(user: UserCreate, db: Session = Depends(get_db)):
 
 @router.post("/login")
 def login(user: UserLogin, response: Response, db: Session = Depends(get_db)):
-    """Login user and set JWT token in HttpOnly cookie"""
-    # Find user
+    """Logowanie - ustawia token JWT w ciasteczku HttpOnly."""
     db_user = db.query(User).filter(User.email == user.email).first()
     if not db_user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid email or password"
+            detail="Nieprawidłowy email lub hasło"
         )
     
-    # Verify password
     if not verify_password(user.password, db_user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid email or password"
+            detail="Nieprawidłowy email lub hasło"
         )
 
     if not db_user.email_verified:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Please verify your email before logging in"
+            detail="Przed zalogowaniem potwierdź adres email"
         )
 
-    # Create token
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={"sub": db_user.email}, expires_delta=access_token_expires
@@ -102,25 +98,25 @@ def login(user: UserLogin, response: Response, db: Session = Depends(get_db)):
         path="/",
     )
 
-    return {"message": "Login successful"}
+    return {"message": "Zalogowano"}
 
 
 @router.post("/logout")
 def logout(response: Response):
-    """Logout user by clearing auth cookie"""
+    """Wylogowanie - usuwa ciasteczko z tokenem."""
     response.delete_cookie(key="access_token", path="/")
-    return {"message": "Logout successful"}
+    return {"message": "Wylogowano"}
 
 
 @router.get("/me", response_model=UserOut)
 def get_me(current_user: User = Depends(get_current_user)):
-    """Get current user info"""
+    """Dane zalogowanego użytkownika."""
     return current_user
 
 
 @router.post("/verify-email")
 def verify_email(payload: EmailVerifyRequest, db: Session = Depends(get_db)):
-    """Confirm a user's email using the code sent at registration/resend"""
+    """Potwierdza adres email kodem wysłanym przy rejestracji."""
     db_user = db.query(User).filter(User.email == payload.email).first()
 
     invalid = (
@@ -133,7 +129,7 @@ def verify_email(payload: EmailVerifyRequest, db: Session = Depends(get_db)):
     if invalid:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid or expired verification code"
+            detail="Nieprawidłowy lub wygasły kod weryfikacyjny"
         )
 
     db_user.email_verified = True
@@ -141,12 +137,12 @@ def verify_email(payload: EmailVerifyRequest, db: Session = Depends(get_db)):
     db_user.email_verification_expires = None
     db.commit()
 
-    return {"message": "Email verified successfully"}
+    return {"message": "Adres email potwierdzony"}
 
 
 @router.post("/resend-verification")
 def resend_verification(payload: ResendVerificationRequest, db: Session = Depends(get_db)):
-    """Issue a fresh verification code, invalidating any previous one"""
+    """Generuje nowy kod weryfikacyjny, unieważniając poprzedni."""
     db_user = db.query(User).filter(User.email == payload.email).first()
 
     if db_user and not db_user.email_verified:
@@ -156,12 +152,12 @@ def resend_verification(payload: ResendVerificationRequest, db: Session = Depend
         db.commit()
         send_verification_email(db_user.email, code)
 
-    return {"message": "If the account exists and is not verified, a new verification code has been sent"}
+    return {"message": "Jeśli konto istnieje i nie jest zweryfikowane, wysłano nowy kod"}
 
 
 @router.post("/forgot-password")
 def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(get_db)):
-    """Issue a password reset code; response is identical whether or not the email exists"""
+    """Wysyła kod resetu hasła; odpowiedź jest identyczna niezależnie od istnienia konta."""
     db_user = db.query(User).filter(User.email == payload.email).first()
 
     if db_user:
@@ -171,12 +167,12 @@ def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(get_db
         db.commit()
         send_password_reset_email(db_user.email, code)
 
-    return {"message": "If an account with that email exists, a password reset code has been sent"}
+    return {"message": "Jeśli konto z tym adresem istnieje, wysłano kod resetu hasła"}
 
 
 @router.post("/reset-password")
 def reset_password(payload: ResetPasswordRequest, db: Session = Depends(get_db)):
-    """Set a new password using the code issued by /forgot-password"""
+    """Ustawia nowe hasło na podstawie kodu z /forgot-password."""
     db_user = db.query(User).filter(User.email == payload.email).first()
 
     invalid = (
@@ -189,7 +185,7 @@ def reset_password(payload: ResetPasswordRequest, db: Session = Depends(get_db))
     if invalid:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid or expired reset code"
+            detail="Nieprawidłowy lub wygasły kod resetu"
         )
 
     db_user.hashed_password = hash_password(payload.new_password)
@@ -197,4 +193,4 @@ def reset_password(payload: ResetPasswordRequest, db: Session = Depends(get_db))
     db_user.password_reset_expires = None
     db.commit()
 
-    return {"message": "Password reset successfully"}
+    return {"message": "Hasło zostało zmienione"}
