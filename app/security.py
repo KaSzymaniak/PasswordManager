@@ -1,5 +1,6 @@
-# app/security.py
 import os
+import secrets
+import logging
 from datetime import datetime, timedelta
 from typing import Optional
 from dotenv import load_dotenv
@@ -11,25 +12,33 @@ from app.database import get_db
 
 load_dotenv()
 
+logger = logging.getLogger("uvicorn.error")
+
 # ========== JWT (autentykacja użytkowników) ==========
-SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-change-in-production")
+SECRET_KEY = os.getenv("SECRET_KEY")
+if not SECRET_KEY:
+    # Brak klucza w .env - losowy klucz na czas działania procesu. Bezpieczny
+    # (nikt go nie zna), ale po restarcie serwera wszystkie sesje wygasają.
+    SECRET_KEY = secrets.token_urlsafe(32)
+    logger.warning("SECRET_KEY nie jest ustawiony w .env - użyto losowego klucza, "
+                   "sesje wygasną po restarcie serwera")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
 
 def hash_password(password: str) -> str:
-    """Hash password using bcrypt"""
+    """Hashuje hasło algorytmem bcrypt."""
     salt = bcrypt.gensalt()
     return bcrypt.hashpw(password.encode(), salt).decode()
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Verify password against hash"""
+    """Sprawdza hasło z hashem bcrypt."""
     return bcrypt.checkpw(plain_password.encode(), hashed_password.encode())
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
-    """Create JWT token"""
+    """Tworzy podpisany token JWT."""
     to_encode = data.copy()
     if expires_delta:
         expire = datetime.utcnow() + expires_delta
@@ -51,7 +60,7 @@ def get_token_from_request(request: Request) -> str:
 
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Not authenticated",
+        detail="Brak autoryzacji",
         headers={"WWW-Authenticate": "Bearer"},
     )
 
@@ -60,12 +69,12 @@ async def get_current_user(
     request: Request,
     db: Session = Depends(get_db),
 ):
-    """Verify JWT token and return current user"""
+    """Weryfikuje token JWT i zwraca zalogowanego użytkownika."""
     from app.models.user import User
-    
+
     credential_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
+        detail="Nieprawidłowy lub wygasły token",
         headers={"WWW-Authenticate": "Bearer"},
     )
 
@@ -77,7 +86,7 @@ async def get_current_user(
             raise credential_exception
     except jwt.InvalidTokenError:
         raise credential_exception
-    
+
     user = db.query(User).filter(User.email == email).first()
     if user is None:
         raise credential_exception

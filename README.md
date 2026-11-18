@@ -1,120 +1,122 @@
-Aplikacja menadżera haseł umożliwiająca bezpieczne generowanie, przechowywanie i zarządzanie hasłami użytkownika.
+# Menedżer Haseł
 
-## � Bezpieczeństwo
+Aplikacja webowa do bezpiecznego przechowywania haseł z szyfrowaniem
+wykonywanym w całości w przeglądarce (model zero-knowledge).
 
-- **Szyfrowanie end-to-end**: PIN + klucz Fernet + sól konta łączą się w przeglądarce (PBKDF2 → AES-GCM) w klucz sejfu
-- **Zero-knowledge**: Serwer NIE ma dostępu do PIN-u, klucza Fernet ani haseł w postaci jawnej
-- **Brak trwałego zapisu**: PIN i klucz Fernet żyją tylko w pamięci sesji przeglądarki - wpisujesz je po każdym zalogowaniu
-- **Konto odzyskiwalne, sejf nie**: hasło logowania możesz zresetować mailem; PIN i klucz Fernet - nie (zero-knowledge, patrz `docs/RECOVERY.md`)
-- ⚠️ **Ważne**: Zapisz klucz Fernet w bezpiecznym miejscu - bez niego (i bez PIN-u) nie odzyskasz haseł!
+## Bezpieczeństwo
 
-## 🛠️ Technologie
+- **Szyfrowanie end-to-end**: PIN + klucz sejfu + sól konta są łączone w przeglądarce (PBKDF2 → AES-256-GCM) w klucz szyfrujący
+- **Zero-knowledge**: serwer nie ma dostępu do PIN-u, klucza sejfu ani haseł w postaci jawnej - przechowuje wyłącznie szyfrogramy
+- **Brak trwałego zapisu**: PIN i klucz sejfu istnieją tylko w pamięci sesji przeglądarki - wpisuje się je po każdym zalogowaniu
+- **Konto odzyskiwalne, sejf nie**: hasło logowania można zresetować kodem wysłanym mailem, PIN-u ani klucza sejfu nie da się odzyskać (szczegóły: `docs/RECOVERY.md`)
+
+## Technologie
 
 - **Frontend:** Vue 3, Vite
 - **Backend:** FastAPI (Python)
-- **Baza danych:** SQLite
-- **Szyfrowanie:** Fernet (cryptography)
-- **Autentykacja:** JWT, bcrypt
-- **Inne:** SQLAlchemy, Pydantic
+- **Baza danych:** SQLite (SQLAlchemy)
+- **Kryptografia:** Web Crypto API - PBKDF2-HMAC-SHA256, AES-256-GCM
+- **Autentykacja:** JWT w ciasteczku HttpOnly, hashowanie haseł bcrypt
+- **Walidacja:** Pydantic
 
-## 🚀 Uruchomienie aplikacji
+## Uruchomienie
 
-### Szybki start (lokalnie)
-
-1. Zainstaluj backend (z korzenia repo):
-   - Komenda: `pip install -r requirements.txt`
+1. Zainstaluj zależności backendu (z katalogu głównego repozytorium):
+   ```bash
+   pip install -r requirements.txt
+   ```
 2. Zbuduj frontend:
-   - Wejdź do folderu `frontend/frontend-app/`, zainstaluj zależności i wykonaj build.
-   - Komendy: `cd frontend/frontend-app` → `npm install` → `npm run build`
-3. Uruchom backend (z korzenia repo, nie z `app/`):
-   - Importy w kodzie mają postać `from app.database import ...`, więc `app` musi być pakietem widocznym z korzenia repo — `python app/main.py` tego nie zapewni.
-   - Komenda: `python -m uvicorn app.main:app --reload --reload-dir app`
-   - Backend serwuje zbudowany frontend z `frontend/frontend-app/dist`.
-4. Otwórz w przeglądarce:
-   - `http://localhost:8000`
+   ```bash
+   cd frontend/frontend-app
+   npm install
+   npm run build
+   ```
+3. Uruchom backend (z katalogu głównego repozytorium):
+   ```bash
+   python -m uvicorn app.main:app --reload --reload-dir app
+   ```
+   Backend serwuje zbudowany frontend z `frontend/frontend-app/dist`.
+4. Otwórz w przeglądarce `http://localhost:8000`.
 
-### Uruchomienie na Replit
+### Konfiguracja (opcjonalna)
 
-1. Zainstaluj zależności backendu z korzenia repo.
-   - Komenda: `pip install -r requirements.txt`
-2. Zbuduj frontend w `frontend/frontend-app/` (powstaje `dist/`).
-   - Komendy: `cd frontend/frontend-app` → `npm install` → `npm run build`
-3. W ustawieniach Replit uruchamiaj komendę (z korzenia repo):
-   - `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
-4. Otwórz publiczny URL replita.
+Aplikacja działa bez dodatkowej konfiguracji. Opcjonalne zmienne można
+umieścić w pliku `.env` w katalogu głównym:
 
-## 📖 Jak używać
+| Zmienna | Znaczenie | Domyślnie |
+|---|---|---|
+| `SECRET_KEY` | Klucz podpisujący tokeny JWT | losowy przy każdym starcie (sesje wygasają po restarcie serwera) |
+| `COOKIE_SECURE` | Ciasteczko tylko przez HTTPS | `false` |
+| `CORS_ALLOWED_ORIGINS` | Dozwolone originy (po przecinku) | `http://localhost:8000,http://127.0.0.1:8000` |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM` | Wysyłka kodów weryfikacyjnych mailem | brak - kody są wypisywane w konsoli serwera |
 
-### Pierwsze uruchomienie
+Stały `SECRET_KEY` można wygenerować poleceniem:
+```bash
+python -c "import secrets; print(secrets.token_urlsafe(32))"
+```
 
-1. **Zarejestruj się** - utwórz konto podając email i hasło
-2. **Zaloguj się** - wprowadź swoje dane logowania
-3. **Wygeneruj klucz Fernet** - kliknij przycisk "🔑 Generuj nowy klucz"
-4. **ZAPISZ KLUCZ!** - skopiuj i zapisz klucz w bezpiecznym miejscu (np. w innym menedżerze haseł)
-   - ⚠️ Bez tego klucza NIE ODSZYFRUJESZ swoich haseł!
-   - Klucz wygląda np. tak: `wRs7fzBk1FQMskeg+wBu8GEo88onobj+xB4jnNBEw67Ss=`
+## Jak używać
 
-### Dodawanie haseł
+### Rejestracja i logowanie
 
-1. Upewnij się, że **klucz Fernet jest wpisany** w żółtej sekcji
-2. Wypełnij formularz:
-   - **Serwis**: Nazwa serwisu (np. "Facebook", "Gmail")
-   - **Login**: Nazwa użytkownika lub email
-   - **Hasło**: Hasło do tego serwisu
-3. Kliknij **"Dodaj"**
-4. Hasło zostanie **zaszyfrowane** Twoim kluczem i zapisane w bazie
+1. **Zarejestruj się** podając email i hasło (min. 8 znaków, mała i wielka litera, cyfra, znak specjalny)
+2. **Potwierdź email** kodem - bez skonfigurowanego SMTP kod pojawia się w konsoli serwera
+3. **Zaloguj się**
 
-### Wyświetlanie haseł
+### Pierwsze odblokowanie sejfu
 
-1. Upewnij się, że **klucz Fernet jest wpisany** (ten sam, którego użyłeś do szyfrowania)
-2. Kliknij **"Pokaż"** przy wybranym haśle
-3. Hasło zostanie odszyfrowane i wyświetlone zamiast `***`
+1. Wpisz **PIN** (min. 4 cyfry)
+2. Kliknij **„Generuj nowy klucz”** - wyświetli się nowy klucz sejfu
+3. **Zapisz klucz** w bezpiecznym miejscu (np. na kartce) i potwierdź to w oknie
+4. Kliknij **„Odblokuj sejf”**
 
-### Usuwanie haseł
+Przy kolejnych logowaniach wpisujesz ten sam PIN i klucz sejfu, a następnie
+klikasz „Odblokuj sejf”. Błędna kombinacja jest odrzucana.
 
-1. Kliknij **"Usuń"** przy wybranym haśle
-2. Potwierdź usunięcie
+### Zarządzanie hasłami
 
-## ⚠️ Ważne Informacje o Bezpieczeństwie
+- **Dodawanie**: wypełnij pola Serwis, Login, Hasło i kliknij „Dodaj” - hasło jest szyfrowane w przeglądarce przed wysłaniem
+- **Podgląd**: „Pokaż” odszyfrowuje hasło lokalnie, „Ukryj” chowa je ponownie
+- **Usuwanie**: „Usuń” i potwierdzenie
 
-### PIN i Klucz Fernet
+## Ważne informacje o bezpieczeństwie
 
-- **Dwa niezależne sekrety**: PIN (pamiętasz) + klucz Fernet (zapisujesz fizycznie) - oba potrzebne do odszyfrowania sejfu
-- **Przechowywanie**: Oba żyją tylko w pamięci sesji przeglądarki - nigdzie nie są trwale zapisywane
-- **Backup**: **KONIECZNIE** zapisz klucz Fernet poza przeglądarką (kartka, inny menedżer haseł); PIN zapamiętaj
-- **Utrata**: Jeśli zgubisz PIN lub klucz, **hasła są bezpowrotnie stracone** - to celowy kompromis bezpieczeństwa, nie da się tego obejść (szczegóły: `docs/RECOVERY.md`)
-- **Każde logowanie**: Oba trzeba wpisać ponownie po każdym zalogowaniu/odświeżeniu strony
+- **Dwa niezależne sekrety**: PIN (zapamiętany) i klucz sejfu (zapisany poza aplikacją) - oba są potrzebne do odszyfrowania sejfu
+- **Utrata**: zgubienie PIN-u lub klucza oznacza bezpowrotną utratę zapisanych haseł - to celowy kompromis modelu zero-knowledge (`docs/RECOVERY.md`)
+- **Administrator serwera** nie może odszyfrować haseł użytkowników - w bazie znajdują się wyłącznie szyfrogramy AES-GCM
 
-### Co się dzieje z Twoimi danymi?
-
-- **Hasła**: Przechowywane **zaszyfrowane** (AES-GCM) w bazie SQLite na serwerze - serwer widzi tylko nieprzejrzysty ciąg znaków
-- **PIN i klucz Fernet**: **NIE** są przechowywane na serwerze, tylko w Twojej przeglądarce, tylko na czas sesji
-- **Konto** (login/hasło): odzyskiwalne mailem (`docs/RECOVERY.md`) - to inna warstwa niż sejf
-- **Administrator serwera**: **NIE MOŻE** odszyfrować Twoich haseł bez PIN-u i klucza
-- **Bezpieczeństwo**: System typu "zero-knowledge" - tylko Ty znasz swój PIN i klucz
-
-## 📁 Struktura Projektu
+## Struktura projektu
 
 ```
 PasswordManager/
 ├── app/                        # Backend (FastAPI)
-│   ├── main.py                 # Punkt wejścia, CORS, middleware bezpieczeństwa
-│   ├── database.py             # Konfiguracja SQLAlchemy, migracje kolumn
-│   ├── security.py             # JWT, hashowanie, szyfrowanie Fernet
+│   ├── main.py                 # Punkt wejścia, CORS, nagłówki bezpieczeństwa
+│   ├── database.py             # Konfiguracja SQLAlchemy, migracja kolumn
+│   ├── security.py             # JWT, hashowanie haseł (bcrypt)
+│   ├── email_utils.py          # Wysyłka kodów (SMTP lub log serwera)
 │   ├── models/                 # Modele ORM (User, PasswordEntry)
-│   ├── routes/                 # Endpointy /auth i /passwords
-│   ├── schemas/                # Modele Pydantic
-│   └── requirements.txt
+│   ├── routes/                 # Endpointy /auth, /passwords, /vault
+│   └── schemas/                # Modele Pydantic
 ├── frontend/
 │   └── frontend-app/           # Frontend (Vue 3 + Vite)
-│       ├── src/                # Komponenty, logika aplikacji
-│       ├── public/
-│       └── dist/               # Zbudowany frontend serwowany przez backend
+│       └── src/
+│           ├── App.vue         # Interfejs aplikacji
+│           └── crypto.js       # PBKDF2 + AES-GCM (Web Crypto API)
 ├── docs/
-│   ├── architecture.md         # Dokumentacja architektury i bezpieczeństwa
-│   ├── RECOVERY.md             # Model zagrożeń: co odzyskiwalne, co nie
-│   ├── CHANGELOG.md
-│   └── MIGRATION.md
-├── requirements.txt             # Zależności backendu (korzeń repo)
-└── README.md
+│   ├── architecture.md         # Architektura i model bezpieczeństwa
+│   ├── RECOVERY.md             # Model odzyskiwania i zagrożeń
+│   ├── CHANGELOG.md            # Historia zmian
+│   └── MIGRATION.md            # Instrukcje migracji między wersjami
+├── test_api.py                 # Test pełnego przepływu API
+├── test_detailed.py            # Test API ze szczegółowym wydrukiem odpowiedzi
+├── check_db.py                 # Podgląd zawartości bazy SQLite
+└── requirements.txt            # Zależności backendu
+```
+
+## Testy
+
+Przy uruchomionym backendzie (z katalogu głównego):
+```bash
+python test_api.py
+python test_detailed.py
 ```

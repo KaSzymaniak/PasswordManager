@@ -10,11 +10,11 @@ router = APIRouter(prefix="/passwords", tags=["passwords"])
 
 
 def get_user_passwords(user_id: int, db: Session):
-    """Helper to get only current user's passwords"""
+    """Zwraca wyłącznie wpisy należące do danego użytkownika."""
     return db.query(PasswordEntry).filter(PasswordEntry.user_id == user_id).all()
 
 
-# 🔹 Pobierz wszystkie hasła użytkownika (opaque ciphertext)
+# Lista haseł użytkownika (szyfrogramy - odszyfrowanie w przeglądarce)
 @router.get("", response_model=list[PasswordOut])
 def get_passwords(
     current_user: User = Depends(get_current_user),
@@ -32,7 +32,7 @@ def get_passwords(
     ]
 
 
-# 🔹 Dodaj nowe hasło (ciphertext gotowy z przeglądarki)
+# Dodanie hasła (szyfrogram przygotowany w przeglądarce)
 @router.post("", response_model=PasswordOut)
 def add_password(
     password: PasswordCreate,
@@ -56,7 +56,7 @@ def add_password(
     )
 
 
-# 🔹 Edytuj hasło (ciphertext gotowy z przeglądarki)
+# Edycja hasła (szyfrogram przygotowany w przeglądarce)
 @router.put("/{password_id}", response_model=PasswordOut)
 def update_password(
     password_id: int,
@@ -87,7 +87,7 @@ def update_password(
     )
 
 
-# 🔹 Usuń hasło
+# Usunięcie hasła
 @router.delete("/{password_id}")
 def delete_password(
     password_id: int,
@@ -100,8 +100,8 @@ def delete_password(
     ).first()
 
     if not entry:
-        raise HTTPException(status_code=404, detail="Hasło nie znalezione")
+        raise HTTPException(status_code=404, detail="Hasło nie istnieje")
 
     db.delete(entry)
     db.commit()
-    return {"message": "Password deleted"}
+    return {"message": "Hasło usunięte"}

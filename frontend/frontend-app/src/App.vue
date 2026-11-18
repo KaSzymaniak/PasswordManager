@@ -1,8 +1,8 @@
 <template>
   <div class="app-container">
-    <!-- 🔐 LOGIN/REGISTER SCREEN -->
+    <!-- Ekran logowania / rejestracji -->
     <div v-if="!isLoggedIn" class="auth-screen">
-      <h1>Menadżer Haseł</h1>
+      <h1>Menedżer Haseł</h1>
       
       <div v-if="isVerifyMode">
         <h2>Potwierdź adres email</h2>
@@ -79,10 +79,10 @@
       <p v-if="authError" class="error">{{ authError }}</p>
     </div>
 
-    <!-- 🔑 MAIN APP (after login) -->
+    <!-- Główny widok (po zalogowaniu) -->
     <div v-else>
       <div class="header">
-        <h1>Menadżer Haseł</h1>
+        <h1>Menedżer Haseł</h1>
         <button @click="logout" class="logout-btn">Wyloguj</button>
       </div>
 
@@ -93,42 +93,42 @@
           <input v-model="vaultPin" :type="showPin ? 'text' : 'password'" :readonly="vaultUnlocked" inputmode="numeric" placeholder="PIN (min. 4 cyfry)" />
           <button type="button" class="toggle-visibility" @click="showPin = !showPin">{{ showPin ? 'Ukryj' : 'Pokaż' }}</button>
         </div>
-        <small>PIN żyje tylko w pamięci sesji — wpisujesz go po każdym zalogowaniu, nigdzie nie jest zapisywany.</small>
+        <small>PIN żyje tylko w pamięci sesji - wpisujesz go po każdym zalogowaniu, nigdzie nie jest zapisywany.</small>
       </div>
 
       <!-- Klucz odszyfrowania -->
       <div class="key-section">
-        <label>Klucz Fernet (do szyfrowania i odszyfrowania haseł):</label>
-        <input v-model="fernetKey" type="text" :readonly="vaultUnlocked" :placeholder="hasVault ? 'Wpisz wcześniej wygenerowany klucz Fernet' : 'Wpisz lub wygeneruj nowy klucz Fernet'" />
-        <button v-if="!hasVault && !vaultUnlocked" @click="generateFernetKey" class="generate-btn">🔑 Generuj nowy klucz</button>
+        <label>Klucz sejfu (do szyfrowania i odszyfrowania haseł):</label>
+        <input v-model="vaultKey" type="text" :readonly="vaultUnlocked" :placeholder="hasVault ? 'Wpisz wcześniej wygenerowany klucz sejfu' : 'Wpisz lub wygeneruj nowy klucz sejfu'" />
+        <button v-if="!hasVault && !vaultUnlocked" @click="generateVaultKey" class="generate-btn">Generuj nowy klucz</button>
         <small v-if="hasVault">
-          Masz już zapisane hasła — wpisz ten sam PIN i klucz Fernet, którymi je zaszyfrowałeś. Inna kombinacja ich nie odszyfruje.
+          Masz już zapisane hasła - wpisz ten sam PIN i klucz sejfu, którymi je zaszyfrowałeś. Inna kombinacja ich nie odszyfruje.
         </small>
         <small v-else>
-          <strong>⚠️ WAŻNE:</strong> Zapisz ten klucz w bezpiecznym miejscu! Bez niego (i bez PIN-u) nie odszyfrujesz swoich haseł.
+          <strong>WAŻNE:</strong> Zapisz ten klucz w bezpiecznym miejscu! Bez niego (i bez PIN-u) nie odszyfrujesz swoich haseł.
           Klucz żyje tylko w pamięci sesji przeglądarki.
         </small>
       </div>
 
-      <!-- Odblokowanie sejfu: sprawdza PIN + klucz Fernet razem -->
-      <button v-if="!vaultUnlocked" @click="unlockVault">🔓 Odblokuj sejf</button>
-      <p v-else class="info">🔓 Sejf odblokowany</p>
+      <!-- Odblokowanie sejfu: sprawdza PIN + klucz sejfu razem -->
+      <button v-if="!vaultUnlocked" @click="unlockVault">Odblokuj sejf</button>
+      <p v-else class="info">Sejf odblokowany</p>
       <p v-if="vaultError" class="error">{{ vaultError }}</p>
 
-      <!-- Modal ostrzegawczy przy generowaniu klucza Fernet -->
-      <div v-if="showFernetKeyModal" class="modal-overlay">
+      <!-- Modal ostrzegawczy przy generowaniu klucza sejfu -->
+      <div v-if="showVaultKeyModal" class="modal-overlay">
         <div class="modal-box">
-          <h2>Twój nowy klucz Fernet</h2>
+          <h2>Twój nowy klucz sejfu</h2>
           <p class="modal-warning">
-             To jedyna kopia tego klucza.
-            bez niego nie odszyfrujesz swoich haseł, i nie da się go odzyskać.
+            To jedyna kopia tego klucza.
+            Bez niego nie odszyfrujesz swoich haseł i nie da się go odzyskać.
           </p>
-          <code class="modal-key">{{ generatedFernetKey }}</code>
+          <code class="modal-key">{{ generatedVaultKey }}</code>
           <label class="modal-confirm">
-            <input type="checkbox" v-model="fernetKeySavedConfirmed" />
+            <input type="checkbox" v-model="vaultKeySavedConfirmed" />
             Zapisałem klucz w bezpiecznym miejscu
           </label>
-          <button :disabled="!fernetKeySavedConfirmed" @click="confirmFernetKeyModal">Zamknij</button>
+          <button :disabled="!vaultKeySavedConfirmed" @click="confirmVaultKeyModal">Zamknij</button>
         </div>
       </div>
 
@@ -160,7 +160,7 @@
 
 <script>
 import axios from "axios";
-import { deriveVaultKey, encryptText, decryptText, createVerifier, checkVerifier } from "./crypto";
+import { deriveEncryptionKey, encryptText, decryptText, createVerifier, checkVerifier } from "./crypto";
 
 // Backend na tym samym hoście
 const API_URL = window.location.origin;
@@ -176,11 +176,11 @@ export default {
       passwords: [],
       decrypted: {},
       newPassword: { service: "", login: "", password: "" },
-      fernetKey: "",
+      vaultKey: "",
       currentUserEmail: "",
-      showFernetKeyModal: false,
-      generatedFernetKey: "",
-      fernetKeySavedConfirmed: false,
+      showVaultKeyModal: false,
+      generatedVaultKey: "",
+      vaultKeySavedConfirmed: false,
 
       showLoginPassword: false,
       showRegisterPassword: false,
@@ -245,14 +245,14 @@ export default {
         return;
       }
       try {
-        const res = await axios.post(`${API_URL}/auth/register`, {
+        await axios.post(`${API_URL}/auth/register`, {
           email: this.authForm.email,
           password: this.authForm.password,
         });
         this.authError = "";
         this.isRegisterMode = false;
         // Nowe konto - pole klucza pozostaje puste
-        this.fernetKey = "";
+        this.vaultKey = "";
         // Przejdź do ekranu wpisania kodu weryfikacyjnego
         this.verifyForm = { email: this.authForm.email, code: "" };
         this.verifyError = "";
@@ -357,8 +357,8 @@ export default {
       this.isLoggedIn = false;
       this.passwords = [];
       this.decrypted = {};
-      // Klucz Fernet i PIN żyją tylko w pamięci sesji - wylogowanie je czyści
-      this.fernetKey = "";
+      // Klucz sejfu i PIN żyją tylko w pamięci sesji - wylogowanie je czyści
+      this.vaultKey = "";
       this.vaultPin = "";
       this.vaultSalt = "";
       this.vaultVerifier = "";
@@ -381,37 +381,37 @@ export default {
         this.vaultError = "PIN musi mieć min. 4 cyfry";
         return;
       }
-      const fernetKey = this.fernetKey.trim();
-      if (!fernetKey) {
-        this.vaultError = "Wpisz lub wygeneruj klucz Fernet";
+      const vaultKey = this.vaultKey.trim();
+      if (!vaultKey) {
+        this.vaultError = "Wpisz lub wygeneruj klucz sejfu";
         return;
       }
       try {
-        const vaultKey = await deriveVaultKey(this.vaultPin, fernetKey, this.vaultSalt);
+        const encryptionKey = await deriveEncryptionKey(this.vaultPin, vaultKey, this.vaultSalt);
         if (this.vaultVerifier) {
-          if (!(await checkVerifier(this.vaultVerifier, vaultKey))) {
-            this.vaultError = "Zły PIN lub klucz Fernet";
+          if (!(await checkVerifier(this.vaultVerifier, encryptionKey))) {
+            this.vaultError = "Zły PIN lub klucz sejfu";
             return;
           }
         } else {
-          // Brak weryfikatora (nowy sejf lub konto sprzed tej zmiany) -
+          // Brak weryfikatora (nowy sejf lub sejf utworzony przed jego wprowadzeniem) -
           // jeśli są już hasła, kombinacja musi odszyfrować pierwsze z nich
           if (this.passwords.length > 0) {
             try {
-              await decryptText(this.passwords[0].password, vaultKey);
+              await decryptText(this.passwords[0].password, encryptionKey);
             } catch {
-              this.vaultError = "Zły PIN lub klucz Fernet";
+              this.vaultError = "Zły PIN lub klucz sejfu";
               return;
             }
           }
-          const verifier = await createVerifier(vaultKey);
+          const verifier = await createVerifier(encryptionKey);
           await axios.put(`${API_URL}/vault/verifier`, { verifier });
           this.vaultVerifier = verifier;
         }
-        this.fernetKey = fernetKey;
+        this.vaultKey = vaultKey;
         this.vaultUnlocked = true;
       } catch (err) {
-        console.error("[UNLOCK] BŁĄD:", err);
+        console.error("Błąd odblokowania sejfu:", err);
         this.vaultError = err.response?.data?.detail || "Błąd odblokowania sejfu";
       }
     },
@@ -426,8 +426,8 @@ export default {
     async addPassword() {
       if (!this.vaultUnlocked) return;
       try {
-        const vaultKey = await deriveVaultKey(this.vaultPin, this.fernetKey, this.vaultSalt);
-        const encryptedPassword = await encryptText(this.newPassword.password, vaultKey);
+        const encryptionKey = await deriveEncryptionKey(this.vaultPin, this.vaultKey, this.vaultSalt);
+        const encryptedPassword = await encryptText(this.newPassword.password, encryptionKey);
         await axios.post(`${API_URL}/passwords`, {
           service: this.newPassword.service,
           login: this.newPassword.login,
@@ -436,7 +436,7 @@ export default {
         this.newPassword = { service: "", login: "", password: "" };
         this.fetchPasswords();
       } catch (err) {
-        console.error("[ADD] BŁĄD:", err);
+        console.error("Błąd dodawania hasła:", err);
         alert(err.response?.data?.detail || "Błąd dodawania hasła");
       }
     },
@@ -463,19 +463,19 @@ export default {
     async decryptPassword(id, encrypted) {
       if (!this.vaultUnlocked) return;
       try {
-        const vaultKey = await deriveVaultKey(this.vaultPin, this.fernetKey, this.vaultSalt);
-        this.decrypted[id] = await decryptText(encrypted, vaultKey);
+        const encryptionKey = await deriveEncryptionKey(this.vaultPin, this.vaultKey, this.vaultSalt);
+        this.decrypted[id] = await decryptText(encrypted, encryptionKey);
       } catch (err) {
-        console.error("[DECRYPT] BŁĄD:", err);
-        alert("Błąd odszyfrowania - sprawdź czy PIN i klucz Fernet są poprawne");
+        console.error("Błąd odszyfrowania:", err);
+        alert("Błąd odszyfrowania - sprawdź czy PIN i klucz sejfu są poprawne");
       }
     },
-    generateFernetKey() {
-      // Generuj 32 losowe bajty
+    generateVaultKey() {
+      // 32 losowe bajty z kryptograficznego generatora przeglądarki
       const array = new Uint8Array(32);
       crypto.getRandomValues(array);
 
-      // Konwertuj do base64 (poprawnie obsługując wszystkie bajty)
+      // Konwersja do base64
       let binary = '';
       for (let i = 0; i < array.length; i++) {
         binary += String.fromCharCode(array[i]);
@@ -483,26 +483,24 @@ export default {
       const base64 = btoa(binary);
 
       // Nie zapisuj jeszcze nigdzie - dopiero po potwierdzeniu w modalu
-      this.generatedFernetKey = base64;
-      this.fernetKeySavedConfirmed = false;
-      this.showFernetKeyModal = true;
+      this.generatedVaultKey = base64;
+      this.vaultKeySavedConfirmed = false;
+      this.showVaultKeyModal = true;
     },
-    confirmFernetKeyModal() {
-      if (!this.fernetKeySavedConfirmed) return;
-      this.fernetKey = this.generatedFernetKey;
-      this.showFernetKeyModal = false;
-      this.generatedFernetKey = "";
+    confirmVaultKeyModal() {
+      if (!this.vaultKeySavedConfirmed) return;
+      this.vaultKey = this.generatedVaultKey;
+      this.showVaultKeyModal = false;
+      this.generatedVaultKey = "";
     },
   },
   mounted() {
     axios
       .get(`${API_URL}/auth/me`)
       .then((response) => {
+        // Ważne ciasteczko sesji - użytkownik nadal zalogowany po odświeżeniu strony
         this.isLoggedIn = true;
-        // Pobierz email z odpowiedzi (zakładam, że endpoint /auth/me zwraca dane użytkownika)
-        console.log("[MOUNTED] Response /auth/me:", response.data);
         this.currentUserEmail = response.data.email;
-        console.log("[MOUNTED] Email:", this.currentUserEmail);
         this.fetchPasswords();
         this.checkVaultSetup();
       })
@@ -545,13 +543,18 @@ body {
 
 .header {
   display: flex;
-  justify-content: space-between;
+  flex-direction: column;
   align-items: center;
   margin-bottom: 20px;
 }
 
+.header h1 {
+  margin-bottom: 10px;
+}
+
 
 .logout-btn {
+  width: auto;
   background: #ff4444;
   color: white;
   padding: 8px 16px;

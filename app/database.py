@@ -3,7 +3,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
-# SQLite dla Replit (domyślnie) lub PostgreSQL jeśli dostępny
+# Domyślnie SQLite, adres bazy można nadpisać zmienną DATABASE_URL
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
     "sqlite:///./passwords.db"
@@ -20,7 +20,7 @@ Base = declarative_base()
 
 
 def ensure_user_security_columns():
-    """Lightweight migration for SQLite: ensure security-related users columns exist."""
+    """Lekka migracja SQLite: dodaje brakujące kolumny tabeli users."""
     if "sqlite" not in DATABASE_URL:
         return
 
@@ -29,8 +29,8 @@ def ensure_user_security_columns():
         column_names = {column[1] for column in columns}
 
         if "email_verified" not in column_names:
-            # DEFAULT 0 dotyczy nowych wierszy od teraz; istniejące konta
-            # (sprzed weryfikacji email) grandfatherujemy poniżej na 1.
+            # DEFAULT 0 dotyczy nowych wierszy; konta istniejące przed
+            # wprowadzeniem weryfikacji email oznaczamy jako zweryfikowane.
             connection.execute(text("ALTER TABLE users ADD COLUMN email_verified BOOLEAN DEFAULT 0"))
             connection.execute(text("UPDATE users SET email_verified = 1"))
 
@@ -52,8 +52,9 @@ def ensure_user_security_columns():
         if "vault_verifier" not in column_names:
             connection.execute(text("ALTER TABLE users ADD COLUMN vault_verifier VARCHAR"))
 
-# 🔑 Funkcja get_db - tego Ci brakuje!
+
 def get_db():
+    """Zależność FastAPI: sesja bazy danych zamykana po obsłudze żądania."""
     db = SessionLocal()
     try:
         yield db

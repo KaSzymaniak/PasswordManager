@@ -1,8 +1,36 @@
-# Changelog - Historia Zmian
+# Historia zmian
+
+## [3.1.0] - 2026-10-25
+
+### Weryfikator sejfu
+
+#### Dodano
+- **Weryfikator sejfu**: znana stała szyfrowana kluczem szyfrującym przy pierwszym
+  odblokowaniu i zapisywana na serwerze; przy kolejnych odblokowaniach
+  przeglądarka sprawdza nim kombinację PIN + klucz sejfu, zanim pozwoli
+  zaszyfrować nowe hasło
+- **Kolumna `vault_verifier`** (`User`) i endpoint `PUT /vault/verifier`
+  (zapis jednorazowy, ponowny zwraca 409)
+- **Przycisk „Odblokuj sejf”** w interfejsie
+
+#### Zmieniono
+- `GET /vault/salt` zwraca również weryfikator
+- **Nazwa „klucz Fernet” → „klucz sejfu”**: algorytm Fernet nie jest używany
+  od wersji 3.0, klucz jest jednym z wejść PBKDF2; zmiana dotyczy nazw w UI,
+  dokumentacji i kodzie (`deriveVaultKey()` → `deriveEncryptionKey()`)
+- **`SECRET_KEY`**: bez wartości w `.env` aplikacja losuje klucz przy starcie
+  zamiast używać stałej wartości domyślnej
+- Komunikaty API i treść emaili w języku polskim
+
+#### Usunięto
+- Nieużywana kolumna `fernet_key_hash` z dokumentacji, nieużywana zależność
+  `cryptography`, pliki szablonu Vite
+
+---
 
 ## [3.0.0] - 2026-09-28
 
-### 🔐 Główne Zmiany - Szyfrowanie w Przeglądarce
+### Główne Zmiany - Szyfrowanie w Przeglądarce
 
 #### Zmieniono
 - **Szyfrowanie haseł**: Przeniesione w całości do przeglądarki (Web Crypto API,
@@ -23,7 +51,7 @@
 - **`frontend/frontend-app/src/crypto.js`**: moduł `deriveVaultKey()` /
   `encryptText()` / `decryptText()` oparty na natywnym Web Crypto API
 
-### 📁 Zmiany w Plikach
+### Zmiany w Plikach
 
 #### Backend (`app/`)
 - **security.py**: usunięto `encrypt_text()`, `decrypt_text()`, import `Fernet`
@@ -41,22 +69,16 @@
   - Dodano `computed: hasExistingPasswords` (`passwords.length > 0`) jako
     zamiennik sygnału adaptacyjnego UI klucza Fernet
 
-### ⚠️ Breaking Changes
+### Zmiany niekompatybilne wstecz
 - **Stare hasła są niekompatybilne**: wymagany reset bazy danych `passwords.db`
 - **Format zaszyfrowanych danych**: `base64(IV || ciphertext+tag)` zamiast
   tokenu Fernet
-
-### 📊 Statystyki
-
-- Pliki zmienione: 5
-- Pliki dodane: 1 (`crypto.js`)
-- Endpoint usunięty: 1 (`POST /passwords/decrypt`)
 
 ---
 
 ## [2.3.0] - 2026-09-24
 
-### 🔑 Główne Zmiany - UI Klucza Fernet
+### Główne Zmiany - UI Klucza Fernet
 
 #### Dodano
 - **Modal generowania klucza**: Wyświetla nowy klucz z ostrzeżeniem "to
@@ -68,10 +90,10 @@
 
 #### Usunięto
 - **Auto-zapis klucza w `localStorage`**: Klucz Fernet żyje odtąd tylko w
-  pamięci sesji przeglądarki, tak jak PIN — sprzeczne z modelem
+  pamięci sesji przeglądarki, tak jak PIN - sprzeczne z modelem
   zero-knowledge wcześniejsze zachowanie usunięte całkowicie
 
-### 📁 Zmiany w Plikach
+### Zmiany w Plikach
 
 #### Frontend (`frontend/frontend-app/src/`)
 - **App.vue**: modal generowania klucza, `hasFernetKey`/`fetchUserInfo()`
@@ -82,16 +104,16 @@
 
 ## [2.2.0] - 2026-09-18
 
-### 🔒 Główne Zmiany - PIN do Sejfu
+### Główne Zmiany - PIN do Sejfu
 
 #### Dodano
-- **Kolumna `kdf_salt`** (`User`) — losowa sól, niesekretna, tylko do KDF
+- **Kolumna `kdf_salt`** (`User`) - losowa sól, niesekretna, tylko do KDF
 - **`GET /vault/salt`**: generuje/zwraca sól dla zalogowanego użytkownika,
   `is_new` informuje frontend czy to pierwsze wywołanie
 - **Ekran PIN-u** w `App.vue`: PIN żyje wyłącznie w pamięci sesji, nigdy
   nie jest zapisywany ani wysyłany do serwera w jawnej postaci
 
-### 📁 Zmiany w Plikach
+### Zmiany w Plikach
 
 #### Backend (`app/`)
 - **models/user.py**: kolumna `kdf_salt`
@@ -105,7 +127,7 @@
 
 ## [2.1.0] - 2026-09-16
 
-### 📧 Główne Zmiany - Weryfikacja Email i Reset Hasła
+### Główne Zmiany - Weryfikacja Email i Reset Hasła
 
 #### Dodano
 - **Weryfikacja email po rejestracji**: konto tworzone jako niezweryfikowane,
@@ -113,14 +135,14 @@
 - **Reset hasła**: `POST /auth/forgot-password` + `POST /auth/reset-password`,
   generyczna odpowiedź niezależnie czy email istnieje (anty-enumeracja)
 - **Walidacja siły hasła**: min. 8 znaków, mała/wielka litera, cyfra, znak
-  specjalny — przy rejestracji i reset-password, z żywą checklistą w UI
+  specjalny - przy rejestracji i reset-password, z żywą checklistą w UI
 - **`app/email_utils.py`** (nowy plik): wysyłka SMTP (stdlib `smtplib`),
   fallback do logu
 
 #### Zmieniono
 - **`login`**: blokuje logowanie niezweryfikowanym kontom (403)
 
-### 📁 Zmiany w Plikach
+### Zmiany w Plikach
 
 #### Backend (`app/`)
 - **models/user.py**: `email_verified`, kody i daty wygaśnięcia weryfikacji/resetu
@@ -139,7 +161,7 @@
 
 ## [2.0.0] - 2026-03-02
 
-### 🔐 Główne Zmiany - System Szyfrowania
+### Główne Zmiany - System Szyfrowania
 
 #### Zmieniono
 - **System szyfrowania haseł**: Przejście z globalnego klucza Fernet do kluczy generowanych przez użytkowników
@@ -147,7 +169,7 @@
 - **Backend**: Usunięto wymaganie FERNET_KEY z pliku `.env`
 
 #### Dodano
-- **Generator kluczy Fernet w przeglądarce**: Przycisk "🔑 Generuj nowy klucz"
+- **Generator kluczy Fernet w przeglądarce**: Przycisk "Generuj nowy klucz"
 - **localStorage**: Automatyczne zapisywanie klucza w przeglądarce
 - **Szczegółowe logowanie**: Backend i frontend teraz logują operacje szyfrowania/odszyfrowania
 - **Walidacja kluczy**: Sprawdzanie formatu klucza przed operacjami
@@ -157,7 +179,7 @@
 - **Vue 3 kompatybilność**: Zamieniono `this.$set()` na zwykłe przypisanie
 - **Szyfrowanie**: Klucz Fernet jest teraz przekazywany przy każdej operacji
 
-### 📁 Zmiany w Plikach
+### Zmiany w Plikach
 
 #### Backend (`app/`)
 - **security.py**:
@@ -187,45 +209,37 @@
   - Naprawiono `this.$set()` → `this.decrypted[id] = ...` (Vue 3)
   - Dodano szczegółowe `console.log()` dla debugowania
 
-### 🔬 Pliki Testowe (dodane)
+### Pliki Testowe (dodane)
 - `test_fernet.py` - Test generowania kluczy Fernet
 - `test_e2e.py` - Test end-to-end szyfrowania
 - `test_api.py` - Test API przez HTTP
 - `test_detailed.py` - Szczegółowy test flow użytkownika
 - `check_db.py` - Narzędzie do inspekcji bazy danych
 
-### ⚠️ Breaking Changes
+### Zmiany niekompatybilne wstecz
 - **Stare hasła są niekompatybilne**: Hasła zaszyfrowane starym systemem NIE MOGĄ być odszyfrowane nowym systemem
 - **Wymagany reset bazy**: Należy usunąć starą bazę danych `passwords.db`
 - **Użytkownicy muszą wygenerować nowy klucz**: Stary klucz z `.env` nie działa
 
-### 🚀 Jak Używać (Nowa Wersja)
+### Jak Używać (Nowa Wersja)
 
 1. Otwórz aplikację w przeglądarce
 2. Zaloguj się lub zarejestruj
-3. Kliknij "🔑 Generuj nowy klucz" w żółtej sekcji
+3. Kliknij "Generuj nowy klucz"
 4. **ZAPISZ KLUCZ W BEZPIECZNYM MIEJSCU** (np. w menedżerze haseł)
 5. Dodawaj hasła - będą szyfrowane Twoim kluczem
 6. Kliknij "Pokaż" aby odszyfrować hasło
 
-### 🔒 Bezpieczeństwo
+### Bezpieczeństwo
 
 **Zalety nowego systemu:**
-- ✅ Każdy użytkownik ma swój własny klucz szyfrujący
-- ✅ Klucz NIE jest przechowywany na serwerze
-- ✅ Bez klucza hasła są bezpowrotnie zaszyfrowane
-- ✅ Administrator serwera NIE MOŻE odszyfrować haseł użytkowników
+- Każdy użytkownik ma swój własny klucz szyfrujący
+- Klucz NIE jest przechowywany na serwerze
+- Bez klucza hasła są bezpowrotnie zaszyfrowane
+- Administrator serwera NIE MOŻE odszyfrować haseł użytkowników
 
 **Ważne ostrzeżenia:**
-- ⚠️ **Utrata klucza = utrata dostępu do haseł**
-- ⚠️ Klucz jest przechowywany w `localStorage` przeglądarki
-- ⚠️ Po wyczyszczeniu danych przeglądarki klucz zostanie usunięty
-- ⚠️ **KONIECZNIE zapisz klucz poza przeglądarką**
-
-### 📊 Statystyki
-
-- Pliki zmienione: 5
-- Dodane linie: ~150
-- Usunięte linie: ~50
-- Nowe funkcje: 1 (generator kluczy)
-- Naprawione błędy: 2 (konwersja base64, Vue 3 reaktywność)
+- **Utrata klucza = utrata dostępu do haseł**
+- Klucz jest przechowywany w `localStorage` przeglądarki
+- Po wyczyszczeniu danych przeglądarki klucz zostanie usunięty
+- **KONIECZNIE zapisz klucz poza przeglądarką**

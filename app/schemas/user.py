@@ -31,17 +31,11 @@ class UserLogin(BaseModel):
     password: str
 
 
-class Token(BaseModel):
-    access_token: str
-    token_type: str
-
-
 class UserOut(BaseModel):
     id: int
     email: str
 
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
 
 class EmailVerifyRequest(BaseModel):

@@ -9,9 +9,8 @@ load_dotenv()
 logger = logging.getLogger("app.email")
 logger.setLevel(logging.INFO)
 if not logger.handlers:
-    # Uvicorn only configures its own loggers by default, so without an
-    # explicit handler here, INFO records from this logger are silently
-    # dropped (root logger has none) instead of reaching the server console.
+    # Uvicorn konfiguruje domyślnie tylko własne loggery - bez osobnego
+    # handlera komunikaty INFO z tego loggera nie trafiłyby do konsoli serwera.
     _handler = logging.StreamHandler()
     _handler.setFormatter(logging.Formatter("%(asctime)s [%(name)s] %(message)s"))
     logger.addHandler(_handler)
@@ -26,10 +25,10 @@ SMTP_TIMEOUT_SECONDS = 10
 
 
 def _send_or_log(to_email: str, subject: str, body: str) -> None:
-    """Send an email via SMTP if configured, otherwise log it (for testing without a mailbox)."""
+    """Wysyła email przez SMTP, a gdy SMTP nie jest skonfigurowany - zapisuje go w logu serwera."""
     if not SMTP_HOST:
-        logger.info("SMTP not configured; logging email instead of sending. To=%s Subject=%s Body=%s",
-                     to_email, subject, body)
+        logger.info("SMTP nieskonfigurowany - email zapisany w logu zamiast wysłania. Do=%s Temat=%s Treść=%s",
+                    to_email, subject, body)
         return
 
     message = MIMEText(body)
@@ -44,19 +43,18 @@ def _send_or_log(to_email: str, subject: str, body: str) -> None:
                 server.login(SMTP_USERNAME, SMTP_PASSWORD)
             server.sendmail(SMTP_FROM, [to_email], message.as_string())
     except (smtplib.SMTPException, OSError):
-        # A misconfigured/unreachable SMTP server must not break the request
-        # that triggered the email (registration, resend, forgot-password) -
-        # the code is still valid and usable, just not delivered by mail.
-        logger.exception("Failed to send email to %s (Subject=%s); code was still generated.", to_email, subject)
+        # Błąd serwera SMTP nie może przerwać żądania, które wywołało wysyłkę
+        # (rejestracja, ponowne wysłanie kodu, reset hasła) - kod pozostaje ważny.
+        logger.exception("Nie udało się wysłać emaila do %s (Temat=%s); kod został wygenerowany.", to_email, subject)
 
 
 def send_verification_email(to_email: str, code: str) -> None:
-    subject = "Verify your email — Password Manager"
-    body = f"Your verification code is: {code}\n\nThis code expires in 24 hours."
+    subject = "Weryfikacja adresu email - Menedżer Haseł"
+    body = f"Twój kod weryfikacyjny: {code}\n\nKod wygasa po 24 godzinach."
     _send_or_log(to_email, subject, body)
 
 
 def send_password_reset_email(to_email: str, code: str) -> None:
-    subject = "Password reset code — Password Manager"
-    body = f"Your password reset code is: {code}\n\nThis code expires in 1 hour."
+    subject = "Kod resetu hasła - Menedżer Haseł"
+    body = f"Twój kod resetu hasła: {code}\n\nKod wygasa po 1 godzinie."
     _send_or_log(to_email, subject, body)
