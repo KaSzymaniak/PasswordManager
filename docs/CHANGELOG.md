@@ -230,16 +230,3 @@
 5. Dodawaj hasła - będą szyfrowane Twoim kluczem
 6. Kliknij "Pokaż" aby odszyfrować hasło
 
-### Bezpieczeństwo
-
-**Zalety nowego systemu:**
-- Każdy użytkownik ma swój własny klucz szyfrujący
-- Klucz NIE jest przechowywany na serwerze
-- Bez klucza hasła są bezpowrotnie zaszyfrowane
-- Administrator serwera NIE MOŻE odszyfrować haseł użytkowników
-
-**Ważne ostrzeżenia:**
-- **Utrata klucza = utrata dostępu do haseł**
-- Klucz jest przechowywany w `localStorage` przeglądarki
-- Po wyczyszczeniu danych przeglądarki klucz zostanie usunięty
-- **KONIECZNIE zapisz klucz poza przeglądarką**

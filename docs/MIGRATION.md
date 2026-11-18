@@ -24,35 +24,6 @@ szyfrowanie Fernet po stronie serwera.
   (wcześniej „klucz Fernet”) - zmiana dotyczy wyłącznie nazwy, istniejące
   klucze działają bez zmian
 
-### Migracja danych
-
-Hasła zaszyfrowane po stronie serwera (Fernet) nie są kompatybilne z nowym
-formatem - różni się zarówno format szyfrogramu, jak i sposób wyznaczania
-klucza. Na etapie rozwoju projektu jedyną wspieraną ścieżką jest utworzenie
-bazy od nowa:
-
-```bash
-# Linux / macOS
-rm passwords.db
-# Windows PowerShell
-Remove-Item passwords.db -Force
-
-# Nowa baza zostanie utworzona automatycznie przy starcie
-python -m uvicorn app.main:app --reload --reload-dir app
-```
-
-Przy aktualizacji z 3.0 do 3.1 reset bazy nie jest wymagany - brakująca
-kolumna `vault_verifier` jest dodawana automatycznie, a weryfikator zostaje
-utworzony przy pierwszym poprawnym odblokowaniu sejfu.
-
-### Lista kroków
-
-1. Zaktualizuj kod (`git pull`)
-2. Usuń bazę `passwords.db` (tylko przy przejściu z 2.x)
-3. Zainstaluj zależności: `pip install -r requirements.txt`
-4. Zbuduj frontend: `cd frontend/frontend-app && npm install && npm run build`
-5. Uruchom aplikację: `python -m uvicorn app.main:app --reload --reload-dir app`
-6. Ustaw PIN, wygeneruj nowy klucz sejfu i zapisz go w bezpiecznym miejscu
 
 ### Najczęstsze problemy
 
@@ -78,10 +49,3 @@ nie da się odzyskać. Wynika to bezpośrednio z modelu zero-knowledge
 **Wersja 2.x:**
 - Każdy użytkownik generuje własny klucz Fernet w przeglądarce
 - Klucz nie jest przechowywany na serwerze
-
-### Migracja danych
-
-Hasła zaszyfrowane kluczem globalnym nie są kompatybilne z kluczami
-użytkowników. Należy usunąć bazę `passwords.db` oraz zmienną `FERNET_KEY`
-z pliku `.env`, a następnie wygenerować nowy klucz w aplikacji i ponownie
-dodać hasła.
